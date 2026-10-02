@@ -1,1 +1,5 @@
 .env
+# Artefatos de build e deploy
+target/
+reports/
+scripts/discloud-deploy/node_modules/
