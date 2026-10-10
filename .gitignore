@@ -3,3 +3,10 @@
 target/
 reports/
 scripts/discloud-deploy/node_modules/
+
+# Cache de Python e testes
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.coverage.*
