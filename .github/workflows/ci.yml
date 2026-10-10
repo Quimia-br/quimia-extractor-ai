@@ -47,7 +47,7 @@ jobs:
           pip install -r requirements.txt
           pip check
           python -m compileall -q app
-          python -c "import app.main"
+          python -c "import app.main; import app.core.config; import app.schemas.saida"
 
       - name: Explain the Build check
         if: always()
