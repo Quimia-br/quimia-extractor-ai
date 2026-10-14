@@ -1,70 +1,15 @@
+import json
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from app.schemas.saida import ExtracaoSaida
 
 
-def evidencia(secao: str) -> dict:
-    return {"secao": secao, "pagina": 1, "texto_evidencia": "trecho da FDS"}
-
-
 def resposta_valida() -> dict:
-    return {
-        "documento": {
-            "id_fds": 12,
-            "id_produto": 34,
-            "versao": "2026-01",
-            "revisao": "rev-2",
-        },
-        "status": "processado",
-        "mensagem": None,
-        "secoes": {
-            "03": {
-                "encontrada": True,
-                "compostos": [
-                    {
-                        "nome": "Etanol",
-                        "cas_numero": "64-17-5",
-                        "concentracao_min": 5,
-                        "concentracao_max": 10,
-                        "unidade_concentracao": "%",
-                        "evidencias": [evidencia("03")],
-                    }
-                ],
-            },
-            "04": {
-                "encontrada": True,
-                "primeiros_socorros": [
-                    {
-                        "rota_exposicao": "inalacao",
-                        "descricao": "Levar para local ventilado.",
-                        "sintomas": None,
-                        "tratamento_especial": None,
-                        "atencao_medica_imediata": None,
-                        "evidencias": [evidencia("04")],
-                    }
-                ],
-                "orientacoes_gerais": [],
-                "notas_ao_medico": [],
-            },
-            "10": {
-                "encontrada": True,
-                "situacao": "identificadas",
-                "incompatibilidades": [
-                    {
-                        "substancia_reagente": "Agente oxidante",
-                        "cas_numero": None,
-                        "descricao_risco": "Pode reagir com o produto.",
-                        "severidade": "alta",
-                        "evidencias": [evidencia("10")],
-                    }
-                ],
-                "evidencias": [],
-            },
-        },
-        "pendencias": [],
-        "requer_confirmacao": True,
-    }
+    fixture_path = Path(__file__).parent / "fixtures" / "resposta_extracao_completa.json"
+    return json.loads(fixture_path.read_text(encoding="utf-8"))
 
 
 def resposta_com_secoes_nao_localizadas() -> dict:
@@ -102,9 +47,37 @@ def resposta_com_secoes_nao_localizadas() -> dict:
 def test_resposta_completa_valida_e_serializa_aliases_das_secoes():
     resposta = ExtracaoSaida.model_validate(resposta_valida())
     assert resposta.status == "processado"
-    assert resposta.requer_confirmacao is True
     assert resposta.secoes.composicao.compostos[0].nome == "Etanol"
     assert set(resposta.model_dump(by_alias=True)["secoes"]) == {"03", "04", "10"}
+
+
+def test_json_serializado_contem_dados_extraidos_e_evidencias():
+    resposta = ExtracaoSaida.model_validate(resposta_valida())
+    raw_json = resposta.model_dump(mode="json", by_alias=True)
+
+    composto = raw_json["secoes"]["03"]["compostos"][0]
+    assert composto["nome"] == "Etanol"
+    assert composto["cas_numero"] == "64-17-5"
+    assert composto["unidade_concentracao"] == "%"
+    assert composto["evidencias"][0]["secao"] == "03"
+
+    primeiro_socorro = raw_json["secoes"]["04"]["primeiros_socorros"][0]
+    assert primeiro_socorro["atencao_medica_imediata"] is True
+    assert primeiro_socorro["evidencias"][0]["secao"] == "04"
+
+    incompatibilidade = raw_json["secoes"]["10"]["incompatibilidades"][0]
+    assert incompatibilidade["severidade"] == "alta"
+    assert incompatibilidade["evidencias"][0]["secao"] == "10"
+
+
+def test_json_serializado_preserva_atencao_medica_indeterminada_como_null():
+    dados = resposta_valida()
+    dados["secoes"]["04"]["primeiros_socorros"][0]["atencao_medica_imediata"] = None
+
+    resposta = ExtracaoSaida.model_validate(dados)
+    raw_json = resposta.model_dump(mode="json", by_alias=True)
+
+    assert raw_json["secoes"]["04"]["primeiros_socorros"][0]["atencao_medica_imediata"] is None
 
 
 def test_resposta_com_pendencias_e_secoes_nao_localizadas_e_valida():

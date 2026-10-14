@@ -1,16 +1,12 @@
-"""Contrato do JSON enviado pelo backend; não recebe PDF ou credenciais do banco."""
+"""Texto das páginas das seções que serão analisadas."""
 from pydantic import Field, model_validator
-from app.schemas.evidencia import SchemaBase, Texto
 
-class Documento(SchemaBase):
-    id_fds: int = Field(gt=0)
-    id_produto: int = Field(gt=0)
-    versao: Texto
-    revisao: Texto = Field(description='Identificador da revisão do upload, fornecido pelo backend.')
+from app.schemas.evidencia import SchemaBase, Texto
 
 class Pagina(SchemaBase):
     numero: int = Field(gt=0)
     texto: Texto
+
 
 class SecaoEntrada(SchemaBase):
     encontrada: bool
@@ -25,11 +21,12 @@ class SecaoEntrada(SchemaBase):
             raise ValueError('Uma seção não pode conter números de página duplicados.')
         return self
 
+
 class SecoesEntrada(SchemaBase):
     secao_3: SecaoEntrada
     secao_4: SecaoEntrada
     secao_10: SecaoEntrada
 
+
 class ExtracaoEntrada(SchemaBase):
-    documento: Documento
     secoes: SecoesEntrada

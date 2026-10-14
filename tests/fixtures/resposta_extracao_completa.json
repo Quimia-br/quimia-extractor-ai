@@ -1,0 +1,67 @@
+{
+  "status": "processado",
+  "mensagem": null,
+  "secoes": {
+    "03": {
+      "encontrada": true,
+      "compostos": [
+        {
+          "nome": "Etanol",
+          "cas_numero": "64-17-5",
+          "concentracao_min": 5,
+          "concentracao_max": 10,
+          "unidade_concentracao": "%",
+          "evidencias": [
+            {
+              "secao": "03",
+              "pagina": 2,
+              "texto_evidencia": "Etanol: concentração entre 5 e 10%."
+            }
+          ]
+        }
+      ]
+    },
+    "04": {
+      "encontrada": true,
+      "primeiros_socorros": [
+        {
+          "rota_exposicao": "inalacao",
+          "descricao": "Levar para local ventilado.",
+          "sintomas": "Tontura e sonolência.",
+          "tratamento_especial": null,
+          "atencao_medica_imediata": true,
+          "evidencias": [
+            {
+              "secao": "04",
+              "pagina": 3,
+              "texto_evidencia": "Levar para local ventilado."
+            }
+          ]
+        }
+      ],
+      "orientacoes_gerais": [],
+      "notas_ao_medico": []
+    },
+    "10": {
+      "encontrada": true,
+      "situacao": "identificadas",
+      "incompatibilidades": [
+        {
+          "substancia_reagente": "Agentes oxidantes fortes",
+          "cas_numero": null,
+          "descricao_risco": "Pode reagir com o produto.",
+          "severidade": "alta",
+          "evidencias": [
+            {
+              "secao": "10",
+              "pagina": 8,
+              "texto_evidencia": "Incompatível com agentes oxidantes fortes."
+            }
+          ]
+        }
+      ],
+      "evidencias": []
+    }
+  },
+  "pendencias": []
+}

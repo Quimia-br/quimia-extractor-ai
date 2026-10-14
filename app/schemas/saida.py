@@ -1,11 +1,10 @@
-"""Resposta ao backend. O serviço não persiste dados nem aprova a FDS."""
+"""Resultado estruturado da extração das seções selecionadas."""
 from typing import Literal
 from pydantic import Field, model_validator
-from .entrada import Documento
-from .evidencia import Evidencia, NumeroSecao, SchemaBase, Texto
-from .composto import Composto
-from .primeiro_socorro import PrimeiroSocorro, OrientacaoGeral
-from .incompatibilidade import Incompatibilidade
+from app.schemas.evidencia import Evidencia, NumeroSecao, SchemaBase, Texto
+from app.schemas.composto import Composto
+from app.schemas.primeiro_socorro import PrimeiroSocorro, OrientacaoGeral
+from app.schemas.incompatibilidade import Incompatibilidade
 
 class Pendencia(SchemaBase):
     secao: NumeroSecao
@@ -53,12 +52,10 @@ class SecoesSaida(SchemaBase):
     incompatibilidades: IncompatibilidadesExtraidas = Field(alias='10')
 
 class ExtracaoSaida(SchemaBase):
-    documento: Documento
     status: Literal['processado', 'processado_com_pendencias']
     mensagem: Texto | None
     secoes: SecoesSaida
     pendencias: list[Pendencia]
-    requer_confirmacao: Literal[True] = Field(description='A aprovação pela empresa é necessária mesmo sem pendências.')
 
     @model_validator(mode='after')
     def validar_status(self):

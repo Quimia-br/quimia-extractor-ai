@@ -1,7 +1,7 @@
-"""Composição extraída; a resolução de id_substancia pertence ao backend."""
+"""Dados estruturados de um componente extraído da FDS."""
 from typing import Annotated
 from pydantic import Field, model_validator
-from .evidencia import Evidencia, SchemaBase, Texto
+from app.schemas.evidencia import Evidencia, SchemaBase, Texto
 
 Cas = Annotated[str, Field(pattern=r'^\d{2,7}-\d{2}-\d$', max_length=20)]
 Concentracao = Annotated[float, Field(ge=0, le=999.99)]

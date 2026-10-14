@@ -29,12 +29,6 @@ def test_evidencia_valida_e_rejeita_dados_fora_do_contrato():
 def test_entrada_valida_secoes_localizadas_e_nao_localizadas():
     entrada = ExtracaoEntrada.model_validate(
         {
-            "documento": {
-                "id_fds": 1,
-                "id_produto": 2,
-                "versao": "2026-01",
-                "revisao": "rev-1",
-            },
             "secoes": {
                 "secao_3": {
                     "encontrada": True,
@@ -112,5 +106,6 @@ def test_composto_e_demais_contratos_das_secoes():
         }
     )
     assert primeiro_socorro.rota_exposicao == "olhos"
+    assert primeiro_socorro.model_dump()["atencao_medica_imediata"] is None
     assert orientacao.descricao == "Consultar um médico."
     assert incompatibilidade.severidade == "alta"

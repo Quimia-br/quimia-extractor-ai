@@ -116,7 +116,7 @@ jobs:
             echo
             echo "**Resultado:** ${CHECK_RESULT}"
             echo
-            echo '**O que valida:** testes pytest dos agentes, do fluxo de chat, das ferramentas, do FAQ, da configuração e do health check.'
+            echo '**O que valida:** contratos de entrada e saída, validação das evidências, serviço/rotas da API e chamadas estruturadas à IA simuladas.'
             echo
             echo '**Critério de aprovação:** `pytest` termina sem testes com falha ou erro.'
             if [ "${CHECK_RESULT}" = success ]; then

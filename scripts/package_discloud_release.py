@@ -1,4 +1,4 @@
-"""Empacota o quimia-agent no ZIP aceito pela Discloud.
+"""Empacota o quimia-extractor-ai no ZIP aceito pela Discloud.
 
 Uso: python scripts/package_discloud_release.py OUTPUT_ZIP
 """
