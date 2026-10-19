@@ -10,86 +10,128 @@ from app.core.exceptions import ConfiguracaoLLMInvalida, ErroLLM
 from app.schemas.respostas_llm import RespostaComposicaoLLM
 from app.clients.llm import LLMClient
 
+JSON_VALIDO = '{"compostos": [], "pendencias": []}'
 
-class ResponsesFake:
+
+def resposta_chat(conteudo, finish_reason="stop"):
+    escolha = SimpleNamespace(
+        finish_reason=finish_reason,
+        message=SimpleNamespace(content=conteudo),
+    )
+    return SimpleNamespace(choices=[escolha])
+
+
+class CompletionsFake:
     def __init__(self, resposta):
         self.resposta = resposta
         self.parametros = None
 
-    async def parse(self, **parametros):
+    async def create(self, **parametros):
         self.parametros = parametros
-        return SimpleNamespace(output_parsed=self.resposta)
+        return self.resposta
 
 
-class ResponsesComErro:
-    async def parse(self, **parametros):
-        raise APIConnectionError(request=httpx.Request("POST", "https://api.openai.com/v1/responses"))
+class CompletionsComErro:
+    async def create(self, **parametros):
+        raise APIConnectionError(
+            request=httpx.Request("POST", "https://api.commandcode.ai/provider/v1/chat/completions")
+        )
 
 
 class SDKFake:
     def __init__(self, resposta):
-        self.responses = ResponsesFake(resposta)
+        self.chat = SimpleNamespace(completions=CompletionsFake(resposta))
 
 
 def config_llm(**alteracoes):
     return AppConfig(
-        openai_api_key="chave-falsa",
-        openai_model="modelo-falso",
+        llm_api_key="chave-falsa",
+        llm_model="modelo-falso",
         **alteracoes,
     )
 
 
-def test_cliente_llm_chama_responses_parse_com_schema_pydantic():
-    resposta_esperada = RespostaComposicaoLLM(compostos=[], pendencias=[])
-    sdk = SDKFake(resposta_esperada)
-    cliente = LLMClient(config=config_llm(), client=sdk)
-
-    resultado = asyncio.run(
+def responder(cliente):
+    return asyncio.run(
         cliente.responder_estruturado(
-        modelo=RespostaComposicaoLLM,
-        instrucoes="Extraia.",
-        entrada="Texto da ficha.",
+            modelo=RespostaComposicaoLLM,
+            instrucoes="Extraia.",
+            entrada="Texto da ficha.",
         )
     )
 
-    assert resultado == resposta_esperada
-    assert sdk.responses.parametros["text_format"] is RespostaComposicaoLLM
-    assert sdk.responses.parametros["input"] == "Texto da ficha."
-    assert sdk.responses.parametros["store"] is False
+
+def test_cliente_llm_chama_chat_completions_em_modo_json_com_schema_no_prompt():
+    sdk = SDKFake(resposta_chat(JSON_VALIDO))
+    cliente = LLMClient(config=config_llm(), client=sdk)
+
+    resultado = responder(cliente)
+
+    assert resultado == RespostaComposicaoLLM(compostos=[], pendencias=[])
+    parametros = sdk.chat.completions.parametros
+    assert parametros["model"] == "modelo-falso"
+    assert parametros["response_format"] == {"type": "json_object"}
+    assert parametros["max_tokens"] == 8000
+    assert "reasoning_effort" not in parametros
+    sistema, usuario = parametros["messages"]
+    assert sistema["role"] == "system"
+    assert sistema["content"].startswith("Extraia.")
+    assert '"compostos"' in sistema["content"]
+    assert usuario == {"role": "user", "content": "Texto da ficha."}
+
+
+def test_cliente_llm_repassa_limite_de_tokens_e_raciocinio_configurados():
+    sdk = SDKFake(resposta_chat(JSON_VALIDO))
+    cliente = LLMClient(
+        config=config_llm(llm_max_output_tokens=2048, llm_reasoning_effort="low"),
+        client=sdk,
+    )
+
+    responder(cliente)
+
+    assert sdk.chat.completions.parametros["max_tokens"] == 2048
+    assert sdk.chat.completions.parametros["reasoning_effort"] == "low"
 
 
 def test_cliente_llm_rejeita_configuracao_sem_chave():
     with pytest.raises(ConfiguracaoLLMInvalida):
-        LLMClient(config=AppConfig(openai_model="modelo"))
+        LLMClient(config=AppConfig(llm_model="modelo"))
 
 
-def test_cliente_llm_rejeita_resposta_sem_schema_parseado():
-    sdk = SDKFake(None)
-    cliente = LLMClient(config=config_llm(), client=sdk)
+@pytest.mark.parametrize(
+    "resposta",
+    [
+        resposta_chat("isto não é JSON"),
+        resposta_chat('{"compostos": "deveria ser lista", "pendencias": []}'),
+        resposta_chat(JSON_VALIDO, finish_reason="length"),
+        resposta_chat(None),
+        SimpleNamespace(choices=[]),
+    ],
+    ids=["json-malformado", "fora-do-schema", "truncada", "vazia", "sem-escolhas"],
+)
+def test_cliente_llm_rejeita_resposta_fora_do_contrato(resposta):
+    cliente = LLMClient(config=config_llm(), client=SDKFake(resposta))
 
     with pytest.raises(ErroLLM):
-        asyncio.run(
-            cliente.responder_estruturado(
-            modelo=RespostaComposicaoLLM,
-            instrucoes="Extraia.",
-            entrada="Texto da ficha.",
-            )
-        )
+        responder(cliente)
 
 
 def test_cliente_llm_traduz_falha_do_provedor():
     sdk = SDKFake(None)
-    sdk.responses = ResponsesComErro()
+    sdk.chat.completions = CompletionsComErro()
     cliente = LLMClient(config=config_llm(), client=sdk)
 
     with pytest.raises(ErroLLM):
-        asyncio.run(
-            cliente.responder_estruturado(
-                modelo=RespostaComposicaoLLM,
-                instrucoes="Extraia.",
-                entrada="Texto da ficha.",
-            )
-        )
+        responder(cliente)
+
+
+def test_cliente_llm_usa_base_url_configurada():
+    cliente = LLMClient(
+        config=config_llm(llm_base_url="https://api.commandcode.ai/provider/v1")
+    )
+
+    assert str(cliente._client.base_url).startswith("https://api.commandcode.ai/provider/v1")
+    asyncio.run(cliente.fechar())
 
 
 def test_cliente_llm_cria_e_fecha_sdk_quando_nao_e_injetado():
