@@ -14,6 +14,8 @@ class AppConfig(BaseModel):
     llm_max_retries: int | None = Field(default=None, ge=0)
     llm_max_output_tokens: int | None = Field(default=None, gt=0)
     llm_reasoning_effort: str | None = None
+    extrator_api_token: str | None = None
+    extrator_timeout_seconds: float | None = Field(default=None, gt=0)
 
 
 def carregar_config() -> AppConfig:
@@ -25,4 +27,6 @@ def carregar_config() -> AppConfig:
         llm_max_retries=os.getenv("LLM_MAX_RETRIES"),
         llm_max_output_tokens=os.getenv("LLM_MAX_OUTPUT_TOKENS"),
         llm_reasoning_effort=os.getenv("LLM_REASONING_EFFORT"),
+        extrator_api_token=os.getenv("EXTRATOR_API_TOKEN") or None,
+        extrator_timeout_seconds=os.getenv("EXTRATOR_TIMEOUT_SECONDS") or None,
     )

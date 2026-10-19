@@ -15,3 +15,15 @@ class EntradaInvalida(Exception):
 
 class EvidenciaInvalida(Exception):
     """Citação gerada não corresponde ao texto recebido do documento."""
+
+
+class ArquivoNaoPdf(Exception):
+    """Arquivo enviado não é um PDF que possa ser aberto."""
+
+
+class PdfSemTexto(Exception):
+    """PDF não contém texto legível (ex.: documento escaneado)."""
+
+
+class DocumentoNaoFds(Exception):
+    """Nenhuma das seções 3, 4 ou 10 da NBR 14725 foi localizada."""
