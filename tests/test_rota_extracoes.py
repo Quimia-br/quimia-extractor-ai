@@ -235,6 +235,46 @@ def test_falha_da_ia_devolve_502_sem_json_de_extracao(cliente_http):
     assert "secoes" not in resposta.json()
 
 
+def _ia_devolve_concentracoes_do_etanol(cliente_http, minimo, maximo):
+    resposta = cliente_http.fake.respostas[RespostaComposicaoLLM].model_dump()
+    resposta["compostos"][0].update(concentracao_min=minimo, concentracao_max=maximo)
+    cliente_http.fake.respostas[RespostaComposicaoLLM] = RespostaComposicaoLLM.model_validate(resposta)
+
+
+def _pendencias_da_composicao(corpo):
+    return [(p["secao"], p["campo"], p["motivo"]) for p in corpo["pendencias"] if p["secao"] == "03"]
+
+
+def test_concentracao_1500_da_ia_vira_null_com_pendencia_e_resposta_200(cliente_http):
+    _ia_devolve_concentracoes_do_etanol(cliente_http, 65, 1500)
+
+    resposta = enviar(cliente_http, gerar_pdf_texto(FDS_ALCOOL_70))
+
+    assert resposta.status_code == 200, resposta.text
+    assert validar_contrato(resposta.text) == []
+    corpo = resposta.json()
+    assert corpo["status"] == "processado_com_pendencias"
+    assert corpo["mensagem"]
+    etanol = corpo["secoes"]["03"]["compostos"][0]
+    assert (etanol["concentracao_min"], etanol["concentracao_max"]) == (65, None)
+    assert _pendencias_da_composicao(corpo) == [("03", "concentracao_max", "dados_contraditorios")]
+
+
+def test_minimo_acima_do_maximo_da_ia_anula_faixa_com_pendencia_e_resposta_200(cliente_http):
+    _ia_devolve_concentracoes_do_etanol(cliente_http, 70, 65)
+
+    resposta = enviar(cliente_http, gerar_pdf_texto(FDS_ALCOOL_70))
+
+    assert resposta.status_code == 200, resposta.text
+    assert validar_contrato(resposta.text) == []
+    corpo = resposta.json()
+    assert corpo["status"] == "processado_com_pendencias"
+    etanol, agua = corpo["secoes"]["03"]["compostos"]
+    assert (etanol["concentracao_min"], etanol["concentracao_max"]) == (None, None)
+    assert (agua["concentracao_min"], agua["concentracao_max"]) == (30, 35)
+    assert _pendencias_da_composicao(corpo) == [("03", "concentracao", "dados_contraditorios")]
+
+
 def test_extracao_acima_do_prazo_devolve_504(cliente_http, monkeypatch):
     monkeypatch.setenv("EXTRATOR_TIMEOUT_SECONDS", "0.05")
     cliente_http.fake.atraso = 1.0
