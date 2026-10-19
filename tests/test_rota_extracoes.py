@@ -288,6 +288,6 @@ def test_servico_sem_token_configurado_recusa_extracoes(cliente_http, monkeypatc
 
 def test_ia_sem_chave_configurada_devolve_503(cliente_http, monkeypatch):
     app.dependency_overrides.clear()
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.setattr(app.state, "cliente_llm", None, raising=False)
     assert enviar(cliente_http, gerar_pdf_texto(FDS_ALCOOL_70)).status_code == 503

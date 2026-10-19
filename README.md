@@ -8,7 +8,7 @@ O texto da FDS é tratado como conteúdo não confiável. Instruções que apare
 
 - `POST /extracoes` recebe o PDF da FDS, extrai o texto, localiza as seções 3, 4 e 10 e devolve o `ExtracaoSaida` saneado.
 - `GET /health` verifica a disponibilidade, sem autenticação.
-- O núcleo de extração é implementado em Python e usa a API da OpenAI.
+- O núcleo de extração é implementado em Python e chama a IA por Chat Completions em modo JSON, em qualquer provedor OpenAI-compatível (em produção, a Command Code com `deepseek/deepseek-v4-1-flash`). O formato da resposta é validado pelos schemas Pydantic do próprio serviço.
 - O serviço não grava nada em banco nem guarda o PDF após responder; quem persiste o resultado é a quimia-api.
 
 ## Requisitos e configuração local
@@ -20,18 +20,33 @@ python -m pip install -r requirements-dev.txt
 Copy-Item .env.example .env
 ```
 
-Edite `.env` e informe `OPENAI_API_KEY` e `OPENAI_MODEL`. Os demais valores podem ser mantidos ou ajustados:
+Edite `.env` e informe `LLM_API_KEY`, `LLM_MODEL` e `LLM_BASE_URL`. Os demais valores podem ser mantidos ou ajustados:
 
 | Variável | Finalidade |
 |---|---|
-| `OPENAI_API_KEY` | Chave usada pelo cliente da OpenAI |
-| `OPENAI_MODEL` | Modelo usado nas extrações |
+| `LLM_API_KEY` | Chave do provedor de IA |
+| `LLM_MODEL` | Modelo usado nas extrações |
+| `LLM_BASE_URL` | URL base OpenAI-compatível do provedor; sem ela, usa a API da OpenAI |
 | `LLM_TIMEOUT_SECONDS` | Tempo limite de cada chamada à IA |
 | `LLM_MAX_RETRIES` | Tentativas para falhas temporárias |
 | `LLM_MAX_OUTPUT_TOKENS` | Limite de tokens da resposta |
-| `LLM_REASONING_EFFORT` | Nível de raciocínio solicitado ao modelo |
+| `LLM_REASONING_EFFORT` | Nível de raciocínio solicitado ao modelo (enviado só quando definido) |
 | `EXTRATOR_API_TOKEN` | Token exigido em `POST /extracoes`; sem ele, a rota responde 503 |
 | `EXTRATOR_TIMEOUT_SECONDS` | Prazo total de uma extração (padrão 55 s; a quimia-api espera até 60 s) |
+
+Exemplo com a Command Code (o Provider API exige o plano Pro ou superior):
+
+```dotenv
+LLM_API_KEY=<chave criada no Command Code Studio>
+LLM_MODEL=deepseek/deepseek-v4-1-flash
+LLM_BASE_URL=https://api.commandcode.ai/provider/v1
+```
+
+Para conferir os IDs de modelo disponíveis:
+
+```powershell
+Invoke-RestMethod -Uri https://api.commandcode.ai/provider/v1/models -Headers @{ Authorization = "Bearer $env:LLM_API_KEY" }
+```
 
 Gere o token com um valor aleatório longo, por exemplo:
 
@@ -168,4 +183,4 @@ python -m pytest -q
 python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=80
 ```
 
-Os testes usam respostas simuladas e não fazem chamadas pagas à OpenAI. Os PDFs de teste (FDS em texto e PDF só com imagem) são gerados em memória por `tests/pdf_fixtures.py`. Em pull requests, o workflow verifica a instalação e importação da aplicação, executa os testes, exige cobertura mínima de 80% e valida o pacote ZIP da Discloud. A publicação de uma Release executa o deploy e verifica a rota `/health`.
+Os testes usam respostas simuladas e não fazem chamadas pagas ao provedor de IA. Os PDFs de teste (FDS em texto e PDF só com imagem) são gerados em memória por `tests/pdf_fixtures.py`. Em pull requests, o workflow verifica a instalação e importação da aplicação, executa os testes, exige cobertura mínima de 80% e valida o pacote ZIP da Discloud. A publicação de uma Release executa o deploy e verifica a rota `/health`.
