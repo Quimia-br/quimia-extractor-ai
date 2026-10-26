@@ -6,8 +6,9 @@ from app.prompts.base import INSTRUCOES_BASE, formatar_paginas
 from app.prompts.composicao import INSTRUCOES_COMPOSICAO
 from app.schemas.composto import Composto
 from app.schemas.entrada import SecaoEntrada
-from app.schemas.respostas_llm import CompostoLLM, RespostaComposicaoLLM
+from app.schemas.respostas_llm import CompostoLLM, RespostaComposicaoLLM, para_pendencias
 from app.schemas.saida import ComposicaoExtraida, Pendencia
+from app.validators.extracao import vincular_pendencias_aos_compostos
 
 # NUMERIC(5,2) da quimia-api: até 999.99, com duas casas decimais.
 CONCENTRACAO_MINIMA = 0.0
@@ -26,8 +27,9 @@ async def extrair_composicao(
         instrucoes=f"{INSTRUCOES_BASE}\n\n{INSTRUCOES_COMPOSICAO}",
         entrada=formatar_paginas(secao),
     )
-    pendencias = list(resposta.pendencias)
+    pendencias = para_pendencias(resposta.pendencias)
     compostos = [_converter_composto(item, pendencias) for item in resposta.compostos]
+    vincular_pendencias_aos_compostos(compostos, pendencias)
     return ComposicaoExtraida(encontrada=True, compostos=compostos), pendencias
 
 

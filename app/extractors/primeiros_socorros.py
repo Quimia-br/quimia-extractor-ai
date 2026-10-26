@@ -3,7 +3,7 @@ from app.clients.llm import LLMClient
 from app.prompts.base import INSTRUCOES_BASE, formatar_paginas
 from app.prompts.primeiros_socorros import INSTRUCOES_PRIMEIROS_SOCORROS
 from app.schemas.entrada import SecaoEntrada
-from app.schemas.respostas_llm import RespostaPrimeirosSocorrosLLM
+from app.schemas.respostas_llm import RespostaPrimeirosSocorrosLLM, para_pendencias
 from app.schemas.saida import Pendencia, PrimeirosSocorrosExtraidos
 
 
@@ -23,5 +23,5 @@ async def extrair_primeiros_socorros(
             orientacoes_gerais=resposta.orientacoes_gerais,
             notas_ao_medico=resposta.notas_ao_medico,
         ),
-        resposta.pendencias,
+        para_pendencias(resposta.pendencias),
     )

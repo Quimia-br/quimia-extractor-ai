@@ -118,3 +118,75 @@ def test_pendencias_da_ia_sao_preservadas_antes_das_novas():
     }
     _, pendencias = extrair(10, 1500, pendencias=[pendencia_ia])
     assert [p.campo for p in pendencias] == ["cas_numero", "concentracao_max"]
+
+
+TEXTO_DUAS_LINHAS = "Etanol 64-17-5 5 - 10\nHipoclorito de Sódio 7681-52-9 2 - 2,5 NaClO"
+LINHA_ETANOL = "Etanol 64-17-5 5 - 10"
+LINHA_HIPOCLORITO = "Hipoclorito de Sódio 7681-52-9 2 - 2,5 NaClO"
+
+
+def extrair_dois_compostos(evidencias_da_pendencia, campo="unidade_concentracao"):
+    def composto(nome, cas, linha, unidade):
+        return {
+            "nome": nome,
+            "cas_numero": cas,
+            "concentracao_min": 2,
+            "concentracao_max": 10,
+            "unidade_concentracao": unidade,
+            "evidencias": [{"secao": "03", "pagina": 1, "texto_evidencia": linha}],
+        }
+
+    resposta = RespostaComposicaoLLM.model_validate(
+        {
+            "compostos": [
+                composto("Etanol", "64-17-5", LINHA_ETANOL, "%"),
+                composto("Hipoclorito de Sódio", "7681-52-9", LINHA_HIPOCLORITO, None),
+            ],
+            "pendencias": [
+                {
+                    "secao": "03",
+                    "campo": campo,
+                    "motivo": "informacao_ausente",
+                    "descricao": "A unidade de concentração não está especificada.",
+                    "evidencias": evidencias_da_pendencia,
+                }
+            ],
+        }
+    )
+    secao = SecaoEntrada(encontrada=True, paginas=[{"numero": 1, "texto": TEXTO_DUAS_LINHAS}])
+    _, pendencias = asyncio.run(extrair_composicao(FakeLLM(resposta), secao))
+    return pendencias[0]
+
+
+def test_pendencia_aponta_o_composto_cuja_evidencia_ela_repete():
+    pendencia = extrair_dois_compostos([{"secao": "03", "pagina": 1, "texto_evidencia": LINHA_HIPOCLORITO}])
+    assert pendencia.composto is not None
+    assert (pendencia.composto.indice, pendencia.composto.nome, pendencia.composto.cas_numero) == (
+        1,
+        "Hipoclorito de Sódio",
+        "7681-52-9",
+    )
+
+
+def test_pendencia_sem_correspondencia_unica_fica_sem_referencia():
+    assert extrair_dois_compostos([]).composto is None
+
+
+def test_pendencia_de_campo_fora_do_composto_nao_recebe_referencia():
+    pendencia = extrair_dois_compostos(
+        [{"secao": "03", "pagina": 1, "texto_evidencia": LINHA_HIPOCLORITO}], campo="composicao"
+    )
+    assert pendencia.composto is None
+
+
+def test_unico_composto_resolve_pendencia_sem_evidencia():
+    _, pendencias = extrair(10, 20, unidade=None, pendencias=[
+        {
+            "secao": "03",
+            "campo": "unidade_concentracao",
+            "motivo": "informacao_ausente",
+            "descricao": "A unidade de concentração não está especificada.",
+            "evidencias": [],
+        }
+    ])
+    assert pendencias[0].composto.indice == 0
