@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste de extração FDS · Quimia</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #172532; background: #f3f6f7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1480px; margin: auto; padding: 32px 24px; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    p { margin: 0 0 22px; color: #526373; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    section { background: white; border: 1px solid #d9e2e7; border-radius: 12px; padding: 18px; min-width: 0; }
+    .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    h2 { margin: 0; font-size: 18px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    button { border: 1px solid #16636b; border-radius: 6px; background: #16636b; color: white; font: inherit; padding: 8px 12px; cursor: pointer; }
+    button.secondary { color: #16636b; background: white; }
+    button:disabled { opacity: .5; cursor: wait; }
+    textarea, pre { width: 100%; min-height: 510px; margin: 0; padding: 14px; border: 1px solid #cbd6dc; border-radius: 7px; background: #fbfcfc; color: #172532; font: 13px/1.5 ui-monospace, Consolas, monospace; overflow: auto; }
+    textarea { resize: vertical; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+    #estado { min-height: 24px; margin: 0 0 12px; font-weight: 600; }
+    #estado.erro { color: #ad2525; }
+    #estado.sucesso { color: #1d6a43; }
+    @media (max-width: 850px) { .grid { grid-template-columns: 1fr; } textarea, pre { min-height: 320px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Teste local de extração FDS</h1>
+    <p>Informe as páginas das seções 3, 4 e 10. O envio chama o serviço real de extração e pode consumir a API de IA configurada no servidor.</p>
+    <div id="estado" role="status" aria-live="polite"></div>
+    <div class="grid">
+      <section>
+        <div class="bar"><h2>JSON de entrada</h2><div class="actions"><button id="exemplo" class="secondary" type="button">Restaurar exemplo</button><button id="enviar" type="button">Processar FDS</button></div></div>
+        <textarea id="entrada" aria-label="JSON de entrada" spellcheck="false"></textarea>
+      </section>
+      <section>
+        <div class="bar"><h2>Resposta</h2><button id="copiar" class="secondary" type="button" disabled>Copiar JSON</button></div>
+        <pre id="saida" aria-label="JSON de resposta">A resposta aparecerá aqui.</pre>
+      </section>
+    </div>
+  </main>
+  <script>
+    const exemplo = {
+      secoes: {
+        secao_3: { encontrada: true, paginas: [{ numero: 2, texto: "Etanol (CAS 64-17-5): concentração entre 5 e 10%." }] },
+        secao_4: { encontrada: true, paginas: [{ numero: 3, texto: "Em caso de inalação, levar para local ventilado." }] },
+        secao_10: { encontrada: true, paginas: [{ numero: 8, texto: "Incompatível com agentes oxidantes fortes." }] }
+      }
+    };
+    const entrada = document.querySelector('#entrada');
+    const saida = document.querySelector('#saida');
+    const estado = document.querySelector('#estado');
+    const enviar = document.querySelector('#enviar');
+    const copiar = document.querySelector('#copiar');
+    let respostaCopiavel = '';
+    const mostrarEstado = (texto, classe = '') => { estado.textContent = texto; estado.className = classe; };
+    document.querySelector('#exemplo').addEventListener('click', () => { entrada.value = JSON.stringify(exemplo, null, 2); mostrarEstado('Exemplo restaurado.'); });
+    document.querySelector('#exemplo').click();
+    enviar.addEventListener('click', async () => {
+      let dados;
+      try { dados = JSON.parse(entrada.value); }
+      catch (erro) { mostrarEstado(`JSON inválido: ${erro.message}`, 'erro'); return; }
+      enviar.disabled = true;
+      copiar.disabled = true;
+      respostaCopiavel = '';
+      mostrarEstado('Processando…');
+      saida.textContent = 'Aguardando resposta do servidor…';
+      try {
+        const resposta = await fetch('/api/extracoes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados) });
+        const conteudo = await resposta.json();
+        const formatado = JSON.stringify(conteudo, null, 2);
+        saida.textContent = formatado;
+        if (!resposta.ok) {
+          const erro = conteudo.erro;
+          const detalhes = erro?.detalhes?.map(item => `${item.campo}: ${item.mensagem}`).join('; ');
+          mostrarEstado(`Erro ${resposta.status} · ${erro?.tipo || 'requisição'}: ${erro?.mensagem || 'Falha ao processar.'}${detalhes ? ' ' + detalhes : ''}`, 'erro');
+          return;
+        }
+        respostaCopiavel = formatado;
+        copiar.disabled = false;
+        mostrarEstado(`Extração concluída: ${conteudo.status}.`, 'sucesso');
+      } catch (erro) {
+        saida.textContent = '';
+        mostrarEstado(`Erro de comunicação: ${erro.message}`, 'erro');
+      } finally { enviar.disabled = false; }
+    });
+    copiar.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(respostaCopiavel); mostrarEstado('JSON de resposta copiado.', 'sucesso'); }
+      catch (erro) { mostrarEstado(`Não foi possível copiar: ${erro.message}`, 'erro'); }
+    });
+  </script>
+</body>
+</html>

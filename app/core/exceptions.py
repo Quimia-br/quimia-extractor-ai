@@ -9,6 +9,10 @@ class ErroLLM(Exception):
     """O provedor não retornou uma resposta estruturada utilizável."""
 
 
+class CreditoLLMInsuficiente(ErroLLM):
+    """A conta da API não tem créditos para executar extrações."""
+
+
 class EntradaInvalida(Exception):
     """Entrada excede os limites operacionais do extractor."""
 

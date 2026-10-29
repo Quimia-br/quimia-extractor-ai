@@ -1,11 +1,11 @@
 """Adaptador assíncrono do provedor de IA com saída Pydantic estruturada."""
 from typing import TypeVar
 
-from openai import AsyncOpenAI, OpenAIError
+from openai import AsyncOpenAI, OpenAIError, RateLimitError
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import AppConfig, carregar_config
-from app.core.exceptions import ConfiguracaoLLMInvalida, ErroLLM
+from app.core.exceptions import ConfiguracaoLLMInvalida, CreditoLLMInsuficiente, ErroLLM
 
 Modelo = TypeVar("Modelo", bound=BaseModel)
 
@@ -50,6 +50,12 @@ class LLMClient:
 
         try:
             resposta = await self._client.responses.parse(**parametros)
+        except RateLimitError as erro:
+            if erro.code in {"credit_balance_exhausted", "insufficient_quota"}:
+                raise CreditoLLMInsuficiente(
+                    "A conta da API OpenAI está sem créditos. Adicione créditos antes de processar a FDS."
+                ) from erro
+            raise ErroLLM("O provedor de IA limitou temporariamente as chamadas.") from erro
         except (OpenAIError, ValidationError) as erro:
             raise ErroLLM("O provedor de IA não conseguiu gerar uma resposta válida.") from erro
 

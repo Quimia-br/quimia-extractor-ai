@@ -6,7 +6,7 @@ import httpx
 from openai import APIConnectionError
 
 from app.core.config import AppConfig
-from app.core.exceptions import ConfiguracaoLLMInvalida, ErroLLM
+from app.core.exceptions import ConfiguracaoLLMInvalida, CreditoLLMInsuficiente, ErroLLM
 from app.schemas.respostas_llm import RespostaComposicaoLLM
 from app.clients.llm import LLMClient
 
@@ -90,6 +90,27 @@ def test_cliente_llm_traduz_falha_do_provedor():
                 entrada="Texto da ficha.",
             )
         )
+
+
+def test_cliente_llm_identifica_creditos_esgotados(monkeypatch):
+    class ErroLimiteFake(Exception):
+        code = "credit_balance_exhausted"
+
+    class ResponsesSemCredito:
+        async def parse(self, **parametros):
+            raise ErroLimiteFake()
+
+    monkeypatch.setattr("app.clients.llm.RateLimitError", ErroLimiteFake)
+    sdk = SDKFake(None)
+    sdk.responses = ResponsesSemCredito()
+    cliente = LLMClient(config=config_llm(), client=sdk)
+
+    with pytest.raises(CreditoLLMInsuficiente, match="sem créditos"):
+        asyncio.run(cliente.responder_estruturado(
+            modelo=RespostaComposicaoLLM,
+            instrucoes="Extraia.",
+            entrada="Texto da ficha.",
+        ))
 
 
 def test_cliente_llm_cria_e_fecha_sdk_quando_nao_e_injetado():

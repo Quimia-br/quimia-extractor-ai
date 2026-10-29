@@ -8,8 +8,8 @@ O texto da FDS é tratado como conteúdo não confiável. Instruções que apare
 
 - O serviço recebe o texto das páginas; não recebe nem processa PDFs.
 - O núcleo de extração é implementado em Python e usa a API da OpenAI.
-- A aplicação HTTP expõe somente `GET /health` para verificar disponibilidade.
-- Ainda não há endpoint HTTP para solicitar extrações, autenticação por token ou integração com banco de dados.
+- A aplicação HTTP expõe `GET /health`, `POST /api/extracoes` e a interface local `GET /teste`.
+- A extração HTTP e a interface aceitam apenas conexões locais por padrão. Ainda não há autenticação nem integração com banco de dados.
 - A saída completa é montada pelo serviço Python a partir das respostas estruturadas de cada seção.
 
 ## Requisitos e configuração local
@@ -20,6 +20,16 @@ O CI usa Python 3.12. Instale as dependências de desenvolvimento no interpretad
 python -m pip install -r requirements-dev.txt
 Copy-Item .env.example .env
 ```
+
+No Windows, se o comando `python` não apontar para uma instalação funcional, use um ambiente virtual com o Python disponível:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+Se o `.env` já estiver configurado, preserve-o em vez de repetir o `Copy-Item`.
 
 Edite `.env` e informe `OPENAI_API_KEY` e `OPENAI_MODEL`. Os demais valores podem ser mantidos ou ajustados:
 
@@ -38,7 +48,9 @@ Para iniciar a aplicação HTTP localmente:
 uvicorn app.main:app --reload
 ```
 
-A rota `http://127.0.0.1:8000/health` retorna `{"status":"ok"}`. Ela não executa extrações.
+A rota `http://127.0.0.1:8000/health` retorna `{"status":"ok"}`. Abra `http://127.0.0.1:8000/teste` para editar um exemplo de JSON, executar a extração real, inspecionar erros e copiar a resposta formatada. A interface faz `POST /api/extracoes`, a mesma rota que poderá ser usada pelo backend. Se alguma seção estiver marcada como `encontrada: true`, o serviço chama a API da OpenAI e requer credenciais válidas.
+
+As rotas de teste e extração só aceitam clientes de `127.0.0.1` ou `::1` por padrão. Para liberar clientes remotos, configure `EXTRACTION_ALLOW_REMOTE=true` no ambiente **somente depois de implantar autenticação e controles de uso**; a variável não implementa esses controles.
 
 ## Contrato do serviço de extração
 
@@ -70,6 +82,29 @@ O serviço recebe as páginas das três seções. Quando uma seção não foi lo
 Cada página pode conter até 30.000 caracteres; o texto total das seções, até 120.000 caracteres. Se uma seção não foi localizada, o serviço cria uma pendência para ela e não chama o modelo para essa seção.
 
 O resultado contém `status`, `mensagem`, `secoes` e `pendencias`. As seções são representadas pelas chaves JSON `03`, `04` e `10`. Os schemas e exemplos de resposta por seção ficam em `app/schemas/` e `app/prompts/`.
+
+`POST /api/extracoes` recebe exatamente `ExtracaoEntrada` e devolve `ExtracaoSaida` com aliases JSON `03`, `04` e `10`. Não há envelope adicional em caso de sucesso. Exemplo da estrutura de resposta, quando todas as seções estão ausentes:
+
+```json
+{
+  "status": "processado_com_pendencias",
+  "mensagem": "Informações ausentes, verifique o documento anexado",
+  "secoes": {
+    "03": {"encontrada": false, "compostos": []},
+    "04": {"encontrada": false, "primeiros_socorros": [], "orientacoes_gerais": [], "notas_ao_medico": []},
+    "10": {"encontrada": false, "situacao": "secao_nao_localizada", "incompatibilidades": [], "evidencias": []}
+  },
+  "pendencias": [
+    {"secao": "03", "campo": "secao", "motivo": "secao_nao_localizada", "descricao": "A seção 03 não foi localizada na ficha.", "evidencias": []},
+    {"secao": "04", "campo": "secao", "motivo": "secao_nao_localizada", "descricao": "A seção 04 não foi localizada na ficha.", "evidencias": []},
+    {"secao": "10", "campo": "secao", "motivo": "secao_nao_localizada", "descricao": "A seção 10 não foi localizada na ficha.", "evidencias": []}
+  ]
+}
+```
+
+Falhas usam `{"erro":{"tipo":"...","mensagem":"...","detalhes":[]}}`. JSON malformado e entrada fora do schema retornam HTTP 422 com tipos `json_invalido` e `validacao`; texto acima dos limites também retorna `validacao`. Falta de configuração ou de créditos da API retorna 503 com a causa explícita; outras falhas do provedor ou da validação da extração retornam 502, e falha inesperada retorna 500. Em `detalhes`, cada item identifica `campo` e `mensagem`. A interface mostra esses erros e só habilita a cópia de respostas bem sucedidas.
+
+Antes da integração, alinhar com o backend e o banco: autenticação e política de uso; se a entrada terá identificador da FDS ou metadados adicionais; como persistir campos nulos, evidências e pendências; e se erros devem usar esse envelope HTTP ou o padrão da API principal. A rota não grava dados.
 
 ## Chamar o serviço pelo código Python
 
