@@ -3,7 +3,7 @@ from app.clients.llm import LLMClient
 from app.prompts.base import INSTRUCOES_BASE, formatar_paginas
 from app.prompts.incompatibilidades import INSTRUCOES_INCOMPATIBILIDADES
 from app.schemas.entrada import SecaoEntrada
-from app.schemas.respostas_llm import RespostaIncompatibilidadesLLM
+from app.schemas.respostas_llm import RespostaIncompatibilidadesLLM, para_pendencias
 from app.schemas.saida import IncompatibilidadesExtraidas, Pendencia
 
 
@@ -23,5 +23,5 @@ async def extrair_incompatibilidades(
             incompatibilidades=resposta.incompatibilidades,
             evidencias=resposta.evidencias,
         ),
-        resposta.pendencias,
+        para_pendencias(resposta.pendencias),
     )

@@ -6,9 +6,18 @@ from pydantic import BaseModel
 
 from app.core.exceptions import EvidenciaInvalida
 from app.schemas.entrada import SecaoEntrada
-from app.schemas.saida import Pendencia
+from app.schemas.composto import Composto
+from app.schemas.saida import Pendencia, ReferenciaComposto
 
 MENSAGEM_PENDENCIA = "Informações ausentes, verifique o documento anexado"
+CAMPOS_DO_COMPOSTO = {
+    "nome",
+    "cas_numero",
+    "concentracao",
+    "concentracao_min",
+    "concentracao_max",
+    "unidade_concentracao",
+}
 
 
 def criar_pendencia_secao_nao_localizada(secao: str) -> Pendencia:
@@ -70,3 +79,29 @@ def validar_evidencias(
             raise EvidenciaInvalida(
                 "Uma evidência gerada não corresponde ao texto recebido do documento."
             )
+
+
+def vincular_pendencias_aos_compostos(compostos: list[Composto], pendencias: list[Pendencia]) -> None:
+    """Aponta, em cada pendência de um campo do composto, qual composto ela descreve.
+
+    O vínculo vem das citações: a pendência aponta o composto cuja evidência ela repete. Sem correspondência única,
+    só um composto na seção resolve; do contrário a pendência segue sem referência, nunca com um palpite.
+    """
+    citacoes = [
+        {_normalizar_citacao(evidencia.texto_evidencia) for evidencia in composto.evidencias}
+        for composto in compostos
+    ]
+    for pendencia in pendencias:
+        if pendencia.secao != "03" or pendencia.campo not in CAMPOS_DO_COMPOSTO:
+            continue
+        citadas = {_normalizar_citacao(evidencia.texto_evidencia) for evidencia in pendencia.evidencias}
+        candidatos = [indice for indice, doComposto in enumerate(citacoes) if citadas & doComposto]
+        if len(candidatos) == 1:
+            indice = candidatos[0]
+        elif not candidatos and len(compostos) == 1:
+            indice = 0
+        else:
+            continue
+        pendencia.composto = ReferenciaComposto(
+            indice=indice, nome=compostos[indice].nome, cas_numero=compostos[indice].cas_numero
+        )
