@@ -4,10 +4,31 @@ from typing import Annotated, Literal
 from pydantic import ConfigDict, Field
 
 from app.schemas.composto import Cas
-from app.schemas.evidencia import Evidencia, SchemaBase, Texto
+from app.schemas.evidencia import Evidencia, NumeroSecao, SchemaBase, Texto
 from app.schemas.incompatibilidade import Incompatibilidade
 from app.schemas.primeiro_socorro import OrientacaoGeral, PrimeiroSocorro
 from app.schemas.saida import Pendencia
+
+
+class PendenciaLLM(SchemaBase):
+    """Pendência como a IA a devolve; a referência ao composto é calculada em código."""
+
+    secao: NumeroSecao
+    campo: Texto
+    motivo: Literal[
+        'secao_nao_localizada',
+        'informacao_ausente',
+        'documento_nao_especifica',
+        'termo_ambiguo',
+        'dados_contraditorios',
+        'evidencia_invalida',
+    ]
+    descricao: Texto
+    evidencias: list[Evidencia]
+
+
+def para_pendencias(itens: list[PendenciaLLM]) -> list[Pendencia]:
+    return [Pendencia.model_validate(item.model_dump()) for item in itens]
 
 
 class CompostoLLM(SchemaBase):
@@ -29,18 +50,18 @@ class CompostoLLM(SchemaBase):
 
 class RespostaComposicaoLLM(SchemaBase):
     compostos: list[CompostoLLM]
-    pendencias: list[Pendencia]
+    pendencias: list[PendenciaLLM]
 
 
 class RespostaPrimeirosSocorrosLLM(SchemaBase):
     primeiros_socorros: list[PrimeiroSocorro]
     orientacoes_gerais: list[OrientacaoGeral]
     notas_ao_medico: list[OrientacaoGeral]
-    pendencias: list[Pendencia]
+    pendencias: list[PendenciaLLM]
 
 
 class RespostaIncompatibilidadesLLM(SchemaBase):
     situacao: Literal['identificadas', 'ausencia_declarada', 'nao_especificadas']
     incompatibilidades: list[Incompatibilidade]
     evidencias: list[Evidencia]
-    pendencias: list[Pendencia]
+    pendencias: list[PendenciaLLM]

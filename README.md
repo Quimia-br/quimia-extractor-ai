@@ -136,6 +136,8 @@ Cada página pode conter até 30.000 caracteres; o texto total das seções, at�
 
 O resultado contém `status`, `mensagem`, `secoes` e `pendencias`. As seções são representadas pelas chaves JSON `03`, `04` e `10`. Os schemas e exemplos de resposta por seção ficam em `app/schemas/` e `app/prompts/`.
 
+Cada pendência de um campo do composto (`nome`, `cas_numero`, `concentracao`, `concentracao_min`, `concentracao_max`, `unidade_concentracao`) traz `composto`: `{"indice", "nome", "cas_numero"}`, o item de `secoes.03.compostos` a que ela se refere, para que o portal peça a correção do composto certo. O vínculo é calculado pelo serviço, a partir das citações que a pendência repete; sem correspondência única, `composto` é `null`.
+
 ## Chamar o serviço pelo código Python
 
 Com `.env` configurado, o núcleo pode ser usado diretamente pelo serviço Python:

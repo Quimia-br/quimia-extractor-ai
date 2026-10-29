@@ -6,12 +6,18 @@ from app.schemas.composto import Composto
 from app.schemas.primeiro_socorro import PrimeiroSocorro, OrientacaoGeral
 from app.schemas.incompatibilidade import Incompatibilidade
 
+class ReferenciaComposto(SchemaBase):
+    indice: int = Field(ge=0)
+    nome: Texto
+    cas_numero: str | None
+
 class Pendencia(SchemaBase):
     secao: NumeroSecao
     campo: Texto
     motivo: Literal['secao_nao_localizada', 'informacao_ausente', 'documento_nao_especifica', 'termo_ambiguo', 'dados_contraditorios', 'evidencia_invalida']
     descricao: Texto
     evidencias: list[Evidencia]
+    composto: ReferenciaComposto | None = None
 
 class ComposicaoExtraida(SchemaBase):
     encontrada: bool
