@@ -6,10 +6,11 @@ O texto da FDS é tratado como conteúdo não confiável. Instruções que apare
 
 ## Estado atual
 
-- `POST /extracoes` recebe o PDF da FDS, extrai o texto, localiza as seções 3, 4 e 10 e devolve o `ExtracaoSaida` saneado.
-- `GET /health` verifica a disponibilidade, sem autenticação.
-- O núcleo de extração é implementado em Python e chama a IA por Chat Completions em modo JSON, em qualquer provedor OpenAI-compatível (em produção, a Command Code com `deepseek/deepseek-v4-1-flash`). O formato da resposta é validado pelos schemas Pydantic do próprio serviço.
-- O serviço não grava nada em banco nem guarda o PDF após responder; quem persiste o resultado é a quimia-api.
+- O serviço recebe texto das páginas em `POST /api/extracoes` e recebe um PDF em `POST /extracoes`.
+- O núcleo de extração é implementado em Python e usa um provedor de IA compatível com a API da OpenAI.
+- A aplicação HTTP expõe `GET /health`, `POST /api/extracoes`, `POST /extracoes` e a interface local `GET /teste`.
+- A interface e a rota JSON aceitam apenas conexões locais por padrão. A rota de PDF exige token. Ainda não há integração com banco de dados.
+- A saída completa é montada pelo serviço Python a partir das respostas estruturadas de cada seção.
 
 ## Requisitos e configuração local
 
@@ -20,7 +21,17 @@ python -m pip install -r requirements-dev.txt
 Copy-Item .env.example .env
 ```
 
-Edite `.env` e informe `LLM_API_KEY`, `LLM_MODEL` e `LLM_BASE_URL`. Os demais valores podem ser mantidos ou ajustados:
+No Windows, se o comando `python` não apontar para uma instalação funcional, use um ambiente virtual com o Python disponível:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+Se o `.env` já estiver configurado, preserve-o em vez de repetir o `Copy-Item`.
+
+Edite `.env` e informe `LLM_API_KEY` e `LLM_MODEL`. Os demais valores podem ser mantidos ou ajustados:
 
 | Variável | Finalidade |
 |---|---|
@@ -62,48 +73,9 @@ Para iniciar a aplicação HTTP localmente:
 uvicorn app.main:app --reload
 ```
 
-A rota `http://127.0.0.1:8000/health` retorna `{"status":"ok"}`.
+A rota `http://127.0.0.1:8000/health` retorna `{"status":"ok"}`. Abra `http://127.0.0.1:8000/teste` para editar um exemplo de JSON, executar a extração real, inspecionar erros e copiar a resposta formatada. A interface faz `POST /api/extracoes`; a rota autenticada `POST /extracoes` recebe o PDF. Se alguma seção estiver marcada como `encontrada: true`, o serviço chama o provedor de IA e requer credenciais válidas.
 
-## Rota `POST /extracoes`
-
-```
-POST /extracoes
-Authorization: Bearer <EXTRATOR_API_TOKEN>
-Content-Type: multipart/form-data
-  arquivo: PDF da FDS (até 10 MB)
-Accept: application/json
-```
-
-```powershell
-curl.exe -X POST http://127.0.0.1:8000/extracoes -H "Authorization: Bearer $env:EXTRATOR_API_TOKEN" -F "arquivo=@fds.pdf;type=application/pdf"
-```
-
-Fluxo: autenticação (comparação em tempo constante) → limite de tamanho, verificado pelo `Content-Length` e durante a leitura → assinatura `%PDF-` → texto página a página → localização das seções 3, 4 e 10 pelos títulos da ABNT NBR 14725 → extração pela IA → sanitização → 200 com o `ExtracaoSaida`.
-
-| Status | Quando |
-|---|---|
-| 200 | Extração concluída; corpo é o `ExtracaoSaida` saneado |
-| 400 | Arquivo não é PDF, PDF corrompido, campo `arquivo` ausente ou documento sem nenhuma das seções 3, 4 ou 10 |
-| 401 | Token ausente ou errado |
-| 413 | Arquivo acima de 10 MB |
-| 422 | PDF sem texto legível (ex.: escaneado) ou protegido por senha; seções acima dos limites de texto |
-| 502 | A IA falhou ou devolveu uma extração inválida |
-| 503 | `EXTRATOR_API_TOKEN` ou credenciais da IA não configurados |
-| 504 | A extração excedeu `EXTRATOR_TIMEOUT_SECONDS` |
-
-O corpo dos erros é `{"detail": "..."}` e não é repassado ao usuário pela quimia-api.
-
-### Sanitização da resposta 200
-
-A quimia-api grava o JSON em `fds.raw_json` (jsonb) e um trigger materializa as tabelas. Antes de responder, `app/validators/saida_http.py`:
-
-- troca o caractere NUL por espaço em qualquer texto;
-- corta `compostos[].nome` e `incompatibilidades[].substancia_reagente` em 255 caracteres;
-- anula `cas_numero` acima de 20 caracteres (cortar geraria um CAS inexistente);
-- anula concentrações fora de 0 a 999.99 (NUMERIC(5,2)), NaN ou Infinity, e a faixa inteira quando min > max;
-- anula `severidade` e `tipo_residuo` fora das listas.
-
-Cada valor anulado gera uma pendência e a resposta passa a `processado_com_pendencias`. O teste `tests/contrato_api.py` reproduz as regras combinadas com a API e valida a resposta do caminho feliz.
+As rotas `/teste` e `/api/extracoes` só aceitam clientes de `127.0.0.1` ou `::1` por padrão. Para liberar clientes remotos, configure `EXTRACTION_ALLOW_REMOTE=true` no ambiente **somente depois de implantar autenticação e controles de uso nessa rota**; a variável não implementa esses controles. `POST /extracoes` usa `EXTRATOR_API_TOKEN`.
 
 ## Contrato do serviço de extração
 
@@ -136,7 +108,28 @@ Cada página pode conter até 30.000 caracteres; o texto total das seções, at�
 
 O resultado contém `status`, `mensagem`, `secoes` e `pendencias`. As seções são representadas pelas chaves JSON `03`, `04` e `10`. Os schemas e exemplos de resposta por seção ficam em `app/schemas/` e `app/prompts/`.
 
-Cada pendência de um campo do composto (`nome`, `cas_numero`, `concentracao`, `concentracao_min`, `concentracao_max`, `unidade_concentracao`) traz `composto`: `{"indice", "nome", "cas_numero"}`, o item de `secoes.03.compostos` a que ela se refere, para que o portal peça a correção do composto certo. O vínculo é calculado pelo serviço, a partir das citações que a pendência repete; sem correspondência única, `composto` é `null`.
+`POST /api/extracoes` recebe exatamente `ExtracaoEntrada` e devolve `ExtracaoSaida` com aliases JSON `03`, `04` e `10`. Não há envelope adicional em caso de sucesso. Exemplo da estrutura de resposta, quando todas as seções estão ausentes:
+
+```json
+{
+  "status": "processado_com_pendencias",
+  "mensagem": "Informações ausentes, verifique o documento anexado",
+  "secoes": {
+    "03": {"encontrada": false, "compostos": []},
+    "04": {"encontrada": false, "primeiros_socorros": [], "orientacoes_gerais": [], "notas_ao_medico": []},
+    "10": {"encontrada": false, "situacao": "secao_nao_localizada", "incompatibilidades": [], "evidencias": []}
+  },
+  "pendencias": [
+    {"secao": "03", "campo": "secao", "motivo": "secao_nao_localizada", "descricao": "A seção 03 não foi localizada na ficha.", "evidencias": []},
+    {"secao": "04", "campo": "secao", "motivo": "secao_nao_localizada", "descricao": "A seção 04 não foi localizada na ficha.", "evidencias": []},
+    {"secao": "10", "campo": "secao", "motivo": "secao_nao_localizada", "descricao": "A seção 10 não foi localizada na ficha.", "evidencias": []}
+  ]
+}
+```
+
+Falhas usam `{"erro":{"tipo":"...","mensagem":"...","detalhes":[]}}`. JSON malformado e entrada fora do schema retornam HTTP 422 com tipos `json_invalido` e `validacao`; texto acima dos limites também retorna `validacao`. Falta de configuração ou de créditos da API retorna 503 com a causa explícita; outras falhas do provedor ou da validação da extração retornam 502, e falha inesperada retorna 500. Em `detalhes`, cada item identifica `campo` e `mensagem`. A interface mostra esses erros e só habilita a cópia de respostas bem sucedidas.
+
+Antes da integração, alinhar com o backend e o banco: autenticação e política de uso; se a entrada terá identificador da FDS ou metadados adicionais; como persistir campos nulos, evidências e pendências; e se erros devem usar esse envelope HTTP ou o padrão da API principal. A rota não grava dados.
 
 ## Chamar o serviço pelo código Python
 

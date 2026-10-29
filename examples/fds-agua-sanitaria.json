@@ -1,0 +1,31 @@
+{
+  "secoes": {
+    "secao_3": {
+      "encontrada": true,
+      "paginas": [
+        {
+          "numero": 2,
+          "texto": "Hipoclorito de Sódio 7681-52-9 2 – 2,5 NaClO"
+        }
+      ]
+    },
+    "secao_4": {
+      "encontrada": true,
+      "paginas": [
+        {
+          "numero": 3,
+          "texto": "Contato com os olhos: Lave imediatamente os olhos com muita água corrente por não menos que 20 minutos,\nmantendo as pálpebras abertas para assegurar completa irrigação dos olhos e tecidos oculares. Lavar os olhos,\npoucos segundos após a exposição, é essencial para atingir máxima eficiência. Consultar oftalmologista\nimediatamente. Contato com a pele: Remover as roupas e calçados contaminados, debaixo do chuveiro de emergência já ligado.\nLavar continuamente a parte afetada com água fria, por pelo menos 20 minutos. Providenciar socorro médico\nimediatamente.\nInalação: Remover a vítima para ambiente com ar fresco, e mantê-la aquecida. Caso haja dificuldade de respiração,\nadministrar oxigênio. Se a vítima parar de respirar, administrar respiração artificial. Providenciar socorro médico\nimediatamente.\nObservação Importante: manter pessoas treinadas para administração de oxigênio e respiração artificial.\nIngestão: Hipoclorito de Sódio é um produto alcalino corrosivo. Se o produto for ingerido não induzir vômito. Não\nusar Bicarbonato de Sódio ou antídotos ácidos.\nNotas para o Médico: não há antídoto específico. O tratamento é sintomático, devendo ser adotadas medidas de\nsuporte como correção de distúrbios hidroeletrolíticos, metabólicos e assistência respiratória, se necessário.\nMonitorar função hepática e renal, se necessário. Em caso de contato ocular, proceder à lavagem com soro\nfisiológico e encaminhamento para avaliação oftalmológica"
+        }
+      ]
+    },
+    "secao_10": {
+      "encontrada": true,
+      "paginas": [
+        {
+          "numero": 8,
+          "texto": "Estabilidade: O produto se decompõe lentamente à temperatura ambiente liberando gases.\nReatividade: Não há dados disponíveis.\nPossibilidade de reações perigosas: A mistura do produto com ácidos ou produtos à base de amônia produz\ngases tóxicos.\nCondições a serem evitadas: Chamas, calor ou outra fonte de ignição e contato direto com a luz solar.\nMateriais e substâncias incompatíveis: Temperaturas altas e contato com metais e materiais e substâncias\nincompatíveis."
+        }
+      ]
+    }
+  }
+}
