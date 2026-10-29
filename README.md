@@ -35,12 +35,37 @@ Edite `.env` e informe `OPENAI_API_KEY` e `OPENAI_MODEL`. Os demais valores pode
 
 | Variável | Finalidade |
 |---|---|
-| `OPENAI_API_KEY` | Chave usada pelo cliente da OpenAI |
-| `OPENAI_MODEL` | Modelo usado nas extrações |
+| `LLM_API_KEY` | Chave do provedor de IA |
+| `LLM_MODEL` | Modelo usado nas extrações |
+| `LLM_BASE_URL` | URL base OpenAI-compatível do provedor; sem ela, usa a API da OpenAI |
 | `LLM_TIMEOUT_SECONDS` | Tempo limite de cada chamada à IA |
 | `LLM_MAX_RETRIES` | Tentativas para falhas temporárias |
 | `LLM_MAX_OUTPUT_TOKENS` | Limite de tokens da resposta |
-| `LLM_REASONING_EFFORT` | Nível de raciocínio solicitado ao modelo |
+| `LLM_REASONING_EFFORT` | Nível de raciocínio solicitado ao modelo (enviado só quando definido) |
+| `EXTRATOR_API_TOKEN` | Token exigido em `POST /extracoes`; sem ele, a rota responde 503 |
+| `EXTRATOR_TIMEOUT_SECONDS` | Prazo total de uma extração (padrão 55 s; a quimia-api espera até 60 s) |
+
+Exemplo com a Command Code (o Provider API exige o plano Pro ou superior):
+
+```dotenv
+LLM_API_KEY=<chave criada no Command Code Studio>
+LLM_MODEL=deepseek/deepseek-v4-1-flash
+LLM_BASE_URL=https://api.commandcode.ai/provider/v1
+```
+
+Para conferir os IDs de modelo disponíveis:
+
+```powershell
+Invoke-RestMethod -Uri https://api.commandcode.ai/provider/v1/models -Headers @{ Authorization = "Bearer $env:LLM_API_KEY" }
+```
+
+Gere o token com um valor aleatório longo, por exemplo:
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+O mesmo valor deve ser configurado na quimia-api como `QUIMIA_EXTRATOR_TOKEN`, e a URL pública do serviço como `QUIMIA_EXTRATOR_URL`.
 
 Para iniciar a aplicação HTTP localmente:
 
@@ -153,4 +178,4 @@ python -m pytest -q
 python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=80
 ```
 
-Os testes usam respostas simuladas e não fazem chamadas pagas à OpenAI. Em pull requests, o workflow verifica a instalação e importação da aplicação, executa os testes, exige cobertura mínima de 80% e valida o pacote ZIP da Discloud. A publicação de uma Release executa o deploy e verifica a rota `/health`.
+Os testes usam respostas simuladas e não fazem chamadas pagas ao provedor de IA. Os PDFs de teste (FDS em texto e PDF só com imagem) são gerados em memória por `tests/pdf_fixtures.py`. Em pull requests, o workflow verifica a instalação e importação da aplicação, executa os testes, exige cobertura mínima de 80% e valida o pacote ZIP da Discloud. A publicação de uma Release executa o deploy e verifica a rota `/health`.

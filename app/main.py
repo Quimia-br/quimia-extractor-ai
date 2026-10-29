@@ -8,10 +8,19 @@ from app.routes.extracao import router as extracao_router
 from app.routes.health import router as health_router
 
 
+@asynccontextmanager
+async def ciclo_de_vida(aplicacao: FastAPI):
+    yield
+    cliente = getattr(aplicacao.state, "cliente_llm", None)
+    if cliente is not None:
+        await cliente.fechar()
+
+
 app = FastAPI(
     title="Quimia Extractor AI",
-    description="Núcleo de extração de dados das seções 3, 4 e 10 de FDS.",
+    description="Extração de dados das seções 3, 4 e 10 de FDS.",
     version="0.1.0",
+    lifespan=ciclo_de_vida,
 )
 app.include_router(health_router)
 app.include_router(extracao_router)
