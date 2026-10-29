@@ -138,13 +138,13 @@ def test_cliente_llm_identifica_creditos_esgotados(monkeypatch):
     class ErroLimiteFake(Exception):
         code = "credit_balance_exhausted"
 
-    class ResponsesSemCredito:
-        async def parse(self, **parametros):
+    class CompletionsSemCredito:
+        async def create(self, **parametros):
             raise ErroLimiteFake()
 
     monkeypatch.setattr("app.clients.llm.RateLimitError", ErroLimiteFake)
     sdk = SDKFake(None)
-    sdk.responses = ResponsesSemCredito()
+    sdk.chat.completions = CompletionsSemCredito()
     cliente = LLMClient(config=config_llm(), client=sdk)
 
     with pytest.raises(CreditoLLMInsuficiente, match="sem créditos"):

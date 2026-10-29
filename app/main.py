@@ -1,10 +1,13 @@
 """Aplicação FastAPI para extração e testes locais."""
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.core.exceptions import ConfiguracaoLLMInvalida
 from app.routes.extracao import router as extracao_router
+from app.routes.extracoes import router as extracoes_router
 from app.routes.health import router as health_router
 
 
@@ -24,6 +27,7 @@ app = FastAPI(
 )
 app.include_router(health_router)
 app.include_router(extracao_router)
+app.include_router(extracoes_router)
 
 
 @app.exception_handler(HTTPException)

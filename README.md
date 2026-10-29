@@ -6,10 +6,10 @@ O texto da FDS é tratado como conteúdo não confiável. Instruções que apare
 
 ## Estado atual
 
-- O serviço recebe o texto das páginas; não recebe nem processa PDFs.
-- O núcleo de extração é implementado em Python e usa a API da OpenAI.
-- A aplicação HTTP expõe `GET /health`, `POST /api/extracoes` e a interface local `GET /teste`.
-- A extração HTTP e a interface aceitam apenas conexões locais por padrão. Ainda não há autenticação nem integração com banco de dados.
+- O serviço recebe texto das páginas em `POST /api/extracoes` e recebe um PDF em `POST /extracoes`.
+- O núcleo de extração é implementado em Python e usa um provedor de IA compatível com a API da OpenAI.
+- A aplicação HTTP expõe `GET /health`, `POST /api/extracoes`, `POST /extracoes` e a interface local `GET /teste`.
+- A interface e a rota JSON aceitam apenas conexões locais por padrão. A rota de PDF exige token. Ainda não há integração com banco de dados.
 - A saída completa é montada pelo serviço Python a partir das respostas estruturadas de cada seção.
 
 ## Requisitos e configuração local
@@ -31,7 +31,7 @@ py -3.11 -m venv .venv
 
 Se o `.env` já estiver configurado, preserve-o em vez de repetir o `Copy-Item`.
 
-Edite `.env` e informe `OPENAI_API_KEY` e `OPENAI_MODEL`. Os demais valores podem ser mantidos ou ajustados:
+Edite `.env` e informe `LLM_API_KEY` e `LLM_MODEL`. Os demais valores podem ser mantidos ou ajustados:
 
 | Variável | Finalidade |
 |---|---|
@@ -73,9 +73,9 @@ Para iniciar a aplicação HTTP localmente:
 uvicorn app.main:app --reload
 ```
 
-A rota `http://127.0.0.1:8000/health` retorna `{"status":"ok"}`. Abra `http://127.0.0.1:8000/teste` para editar um exemplo de JSON, executar a extração real, inspecionar erros e copiar a resposta formatada. A interface faz `POST /api/extracoes`, a mesma rota que poderá ser usada pelo backend. Se alguma seção estiver marcada como `encontrada: true`, o serviço chama a API da OpenAI e requer credenciais válidas.
+A rota `http://127.0.0.1:8000/health` retorna `{"status":"ok"}`. Abra `http://127.0.0.1:8000/teste` para editar um exemplo de JSON, executar a extração real, inspecionar erros e copiar a resposta formatada. A interface faz `POST /api/extracoes`; a rota autenticada `POST /extracoes` recebe o PDF. Se alguma seção estiver marcada como `encontrada: true`, o serviço chama o provedor de IA e requer credenciais válidas.
 
-As rotas de teste e extração só aceitam clientes de `127.0.0.1` ou `::1` por padrão. Para liberar clientes remotos, configure `EXTRACTION_ALLOW_REMOTE=true` no ambiente **somente depois de implantar autenticação e controles de uso**; a variável não implementa esses controles.
+As rotas `/teste` e `/api/extracoes` só aceitam clientes de `127.0.0.1` ou `::1` por padrão. Para liberar clientes remotos, configure `EXTRACTION_ALLOW_REMOTE=true` no ambiente **somente depois de implantar autenticação e controles de uso nessa rota**; a variável não implementa esses controles. `POST /extracoes` usa `EXTRATOR_API_TOKEN`.
 
 ## Contrato do serviço de extração
 

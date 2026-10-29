@@ -69,11 +69,11 @@ class LLMClient:
             parametros["reasoning_effort"] = self._config.llm_reasoning_effort
 
         try:
-            resposta = await self._client.responses.parse(**parametros)
+            resposta = await self._client.chat.completions.create(**parametros)
         except RateLimitError as erro:
             if erro.code in {"credit_balance_exhausted", "insufficient_quota"}:
                 raise CreditoLLMInsuficiente(
-                    "A conta da API OpenAI está sem créditos. Adicione créditos antes de processar a FDS."
+                    "A conta do provedor de IA está sem créditos. Adicione créditos antes de processar a FDS."
                 ) from erro
             raise ErroLLM("O provedor de IA limitou temporariamente as chamadas.") from erro
         except (OpenAIError, ValidationError) as erro:
