@@ -9,6 +9,7 @@ O texto da FDS é tratado como conteúdo não confiável. Instruções que apare
 - O serviço recebe texto das páginas em `POST /api/extracoes` e recebe um PDF em `POST /extracoes`.
 - O núcleo de extração é implementado em Python e usa um provedor de IA compatível com a API da OpenAI.
 - A aplicação HTTP expõe `GET /health`, `POST /api/extracoes`, `POST /extracoes` e a interface local `GET /teste`.
+- O host da Discloud corta qualquer resposta após cerca de 30 s e entrega uma página HTML com status 200, e uma extração real pode passar disso. Por isso `POST /extracoes/assincronas` (mesma entrada e mesmo token de `POST /extracoes`) devolve `202` com um `id` na hora, e `GET /extracoes/assincronas/{id}` informa `processando`, `concluida` (com o `resultado`, igual à resposta de `POST /extracoes`) ou `falhou` (com `codigo` e `detail`, os mesmos da rota síncrona). Os registros ficam em memória por 15 min, no máximo 6 em andamento (acima disso, `429` com `Retry-After`); um reinício da aplicação perde as extrações em andamento.
 - A interface e a rota JSON aceitam apenas conexões locais por padrão. A rota de PDF exige token. Ainda não há integração com banco de dados.
 - A saída completa é montada pelo serviço Python a partir das respostas estruturadas de cada seção.
 
