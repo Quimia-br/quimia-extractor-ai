@@ -44,7 +44,7 @@ Edite `.env` e informe `LLM_API_KEY` e `LLM_MODEL`. Os demais valores podem ser 
 | `LLM_MAX_OUTPUT_TOKENS` | Limite de tokens da resposta |
 | `LLM_REASONING_EFFORT` | Nível de raciocínio solicitado ao modelo (enviado só quando definido) |
 | `EXTRATOR_API_TOKEN` | Token exigido em `POST /extracoes`; sem ele, a rota responde 503 |
-| `EXTRATOR_TIMEOUT_SECONDS` | Prazo total de uma extração (padrão 55 s; a quimia-api espera até 60 s) |
+| `EXTRATOR_TIMEOUT_SECONDS` | Prazo total de uma extração (padrão 25 s); acima dele a rota responde 504 em JSON |
 
 Exemplo com a Command Code (o Provider API exige o plano Pro ou superior):
 

@@ -30,8 +30,8 @@ LIMITE_ARQUIVO_BYTES = 10 * 1024 * 1024
 # Cabeçalhos e delimitadores do multipart somam alguns KB além do arquivo.
 FOLGA_MULTIPART_BYTES = 64 * 1024
 LIMITE_CORPO_BYTES = LIMITE_ARQUIVO_BYTES + FOLGA_MULTIPART_BYTES
-# A quimia-api espera no máximo 60 s; a margem cobre rede e serialização.
-TIMEOUT_PADRAO_SEGUNDOS = 55.0
+# Uma extração que passa disso falha com 504 em JSON; a quimia-api espera até 60 s por ela.
+TIMEOUT_PADRAO_SEGUNDOS = 25.0
 CAMPO_ARQUIVO = "arquivo"
 
 logger = logging.getLogger(__name__)

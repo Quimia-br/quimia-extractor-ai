@@ -1,7 +1,11 @@
 """Orquestra a extração estruturada das seções 3, 4 e 10."""
 import asyncio
+import logging
+
+from pydantic import ValidationError
 
 from app.clients.llm import LLMClient
+from app.core.exceptions import CreditoLLMInsuficiente, ErroLLM, EvidenciaInvalida
 from app.extractors.composicao import extrair_composicao
 from app.extractors.incompatibilidades import extrair_incompatibilidades
 from app.extractors.primeiros_socorros import extrair_primeiros_socorros
@@ -23,6 +27,11 @@ from app.validators.extracao import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+TENTATIVAS_POR_SECAO = 2
+
+
 class ExtracaoService:
     def __init__(self, cliente: LLMClient):
         self._cliente = cliente
@@ -31,11 +40,11 @@ class ExtracaoService:
         validar_documento(entrada)
         tarefas = []
         if entrada.secoes.secao_3.encontrada:
-            tarefas.append(extrair_composicao(self._cliente, entrada.secoes.secao_3))
+            tarefas.append(self._extrair_secao(extrair_composicao, "03", entrada.secoes.secao_3))
         if entrada.secoes.secao_4.encontrada:
-            tarefas.append(extrair_primeiros_socorros(self._cliente, entrada.secoes.secao_4))
+            tarefas.append(self._extrair_secao(extrair_primeiros_socorros, "04", entrada.secoes.secao_4))
         if entrada.secoes.secao_10.encontrada:
-            tarefas.append(extrair_incompatibilidades(self._cliente, entrada.secoes.secao_10))
+            tarefas.append(self._extrair_secao(extrair_incompatibilidades, "10", entrada.secoes.secao_10))
 
         extraidos = await asyncio.gather(*tarefas) if tarefas else []
         por_secao = iter(extraidos)
@@ -118,6 +127,26 @@ class ExtracaoService:
             },
             pendencias=pendencias,
         )
+
+    async def _extrair_secao(self, extrator, numero_secao: str, secao: SecaoEntrada):
+        """Extrai e confere a seção; uma resposta fora do formato ou com citação inexistente ganha mais uma chance.
+
+        A IA varia de uma chamada para outra, e com o modelo rápido repetir custa poucos segundos, dentro do prazo
+        da extração. Falha de crédito não se repete, e a segunda falha segue para quem chamou.
+        """
+        for tentativa in range(1, TENTATIVAS_POR_SECAO + 1):
+            try:
+                resultado, pendencias = await extrator(self._cliente, secao)
+                self._validar_resultado(resultado, pendencias, numero_secao, secao)
+                return resultado, pendencias
+            except CreditoLLMInsuficiente:
+                raise
+            except (ErroLLM, EvidenciaInvalida, ValidationError) as erro:
+                if tentativa == TENTATIVAS_POR_SECAO:
+                    raise
+                logger.warning(
+                    "Seção %s rejeitada (%s); nova tentativa.", numero_secao, type(erro).__name__
+                )
 
     @staticmethod
     def _validar_resultado(
