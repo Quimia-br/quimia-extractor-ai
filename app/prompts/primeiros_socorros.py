@@ -33,7 +33,7 @@ Resposta esperada para este exemplo:
         {
           "secao": "04",
           "pagina": 3,
-          "texto_evidencia": "INALAÇÃO: Remova a pessoa para local arejado. Pode causar tontura. Procure atendimento médico imediato."
+          "texto_evidencia": "Remova a pessoa para local arejado."
         }
       ]
     }

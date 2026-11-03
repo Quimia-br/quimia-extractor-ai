@@ -10,6 +10,7 @@ from app.schemas.composto import Composto
 from app.schemas.saida import Pendencia, ReferenciaComposto
 
 MENSAGEM_PENDENCIA = "Informações ausentes, verifique o documento anexado"
+SEPARADOR_DE_TRECHOS = re.compile(r"\.{3}|…")
 CAMPOS_DO_COMPOSTO = {
     "nome",
     "cas_numero",
@@ -46,8 +47,10 @@ def validar_secao_das_pendencias(pendencias: list[Pendencia], secao: str) -> Non
 
 
 def _normalizar_citacao(texto: str) -> str:
+    """Compara sem espaços: a extração de texto de PDF costuma abrir palavras ("Cont ate", "m édico") e a IA
+    devolve a palavra inteira; a citação continua tendo de aparecer, caractere a caractere, no texto recebido."""
     texto = unicodedata.normalize("NFKC", texto).casefold()
-    return re.sub(r"\s+", " ", texto).strip()
+    return re.sub(r"\s+", "", texto)
 
 
 def _iterar_evidencias(valor):
@@ -74,11 +77,18 @@ def validar_evidencias(
         if evidencia["secao"] != numero_secao:
             raise EvidenciaInvalida("Uma evidência foi associada à seção errada.")
         texto_fonte = paginas.get(evidencia["pagina"])
-        citacao = evidencia["texto_evidencia"]
-        if texto_fonte is None or _normalizar_citacao(citacao) not in _normalizar_citacao(texto_fonte):
+        if texto_fonte is None or not _citacao_esta_no_texto(evidencia["texto_evidencia"], texto_fonte):
             raise EvidenciaInvalida(
                 "Uma evidência gerada não corresponde ao texto recebido do documento."
             )
+
+
+def _citacao_esta_no_texto(citacao: str, texto_fonte: str) -> bool:
+    """A citação literal está na página; reticências separam trechos literais de uma lista ("Reage com: ... Aminas")."""
+    fonte = _normalizar_citacao(texto_fonte)
+    trechos = [_normalizar_citacao(trecho) for trecho in SEPARADOR_DE_TRECHOS.split(citacao)]
+    trechos = [trecho for trecho in trechos if trecho]
+    return bool(trechos) and all(trecho in fonte for trecho in trechos)
 
 
 def vincular_pendencias_aos_compostos(compostos: list[Composto], pendencias: list[Pendencia]) -> None:

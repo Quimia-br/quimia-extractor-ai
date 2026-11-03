@@ -1,5 +1,6 @@
 """Extração estruturada da seção 3 da FDS."""
 import math
+import re
 
 from app.clients.llm import LLMClient
 from app.prompts.base import INSTRUCOES_BASE, formatar_paginas
@@ -16,6 +17,8 @@ CONCENTRACAO_MAXIMA = 999.99
 CASAS_CONCENTRACAO = 2
 LIMITE_PERCENTUAL = 100.0
 UNIDADE_PERCENTUAL = "%"
+NUMEROS = re.compile(r"\d+(?:[.,]\d+)?")
+CAS = re.compile(r"\b\d{2,7}-\d{2}-\d\b")
 
 
 async def extrair_composicao(
@@ -49,6 +52,15 @@ def _converter_composto(item: CompostoLLM, pendencias: list[Pendencia]) -> Compo
                     f"0 a {limite:g}{_sufixo_unidade(item)} e foi omitida.",
                 )
             )
+        if valido is not None and _contradiz_a_citacao(valido, item):
+            pendencias.append(
+                _pendencia_contraditoria(
+                    item,
+                    campo,
+                    f"A concentração de {item.nome} ({original}) difere da citação do documento e foi omitida.",
+                )
+            )
+            valido = None
         concentracoes[campo] = valido
 
     minimo, maximo = concentracoes["concentracao_min"], concentracoes["concentracao_max"]
@@ -66,6 +78,19 @@ def _converter_composto(item: CompostoLLM, pendencias: list[Pendencia]) -> Compo
     return Composto.model_validate(
         {**item.model_dump(exclude={"concentracao_min", "concentracao_max"}), **concentracoes}
     )
+
+
+def _contradiz_a_citacao(valor: float, item: CompostoLLM) -> bool:
+    """A citação traz números de concentração (fora o CAS) e nenhum deles é o valor: a IA trouxe o de outro componente.
+
+    Citação sem número não prova nem desmente o valor, então ele fica.
+    """
+    citados = {
+        round(float(numero.replace(",", ".")), CASAS_CONCENTRACAO)
+        for evidencia in item.evidencias
+        for numero in NUMEROS.findall(CAS.sub(" ", evidencia.texto_evidencia))
+    }
+    return bool(citados) and round(valor, CASAS_CONCENTRACAO) not in citados
 
 
 def _concentracao_representavel(valor: float | None, limite: float) -> float | None:

@@ -10,6 +10,10 @@ Escolha situacao de acordo com o que está escrito:
   incompatibilidades e evidencias no nível da resposta vazios e crie uma
   pendência com motivo documento_nao_especifica.
 
+A lista incompatibilidades só tem itens quando situacao é identificadas; com
+qualquer outra situacao ela fica vazia. Em identificadas, evidencias no nível da
+resposta fica vazio.
+
 Não confunda ausência de menção com uma declaração de ausência. Para cada item,
 preencha substancia_reagente com o material ou condição citada, cas_numero quando
 estiver explícito, descricao_risco quando o risco estiver descrito e severidade
@@ -34,7 +38,7 @@ Resposta esperada para este exemplo:
         {
           "secao": "10",
           "pagina": 8,
-          "texto_evidencia": "Incompatível com agentes oxidantes fortes. O contato pode provocar reação violenta."
+          "texto_evidencia": "Incompatível com agentes oxidantes fortes."
         }
       ]
     }

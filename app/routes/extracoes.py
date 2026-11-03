@@ -23,14 +23,15 @@ from app.core.exceptions import (
 from app.pdf.secoes import montar_entrada
 from app.pdf.texto import extrair_paginas, possui_assinatura_pdf
 from app.services.extracao_service import ExtracaoService
+from app.services.extracoes_assincronas import CapacidadeEsgotada, FalhaDaExtracao, RegistroDeExtracoes
 from app.validators.saida_http import sanitizar_saida
 
 LIMITE_ARQUIVO_BYTES = 10 * 1024 * 1024
 # Cabeçalhos e delimitadores do multipart somam alguns KB além do arquivo.
 FOLGA_MULTIPART_BYTES = 64 * 1024
 LIMITE_CORPO_BYTES = LIMITE_ARQUIVO_BYTES + FOLGA_MULTIPART_BYTES
-# A quimia-api espera no máximo 60 s; a margem cobre rede e serialização.
-TIMEOUT_PADRAO_SEGUNDOS = 55.0
+# Uma extração que passa disso falha com 504 em JSON; a quimia-api espera até 60 s por ela.
+TIMEOUT_PADRAO_SEGUNDOS = 25.0
 CAMPO_ARQUIVO = "arquivo"
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,39 @@ def obter_cliente_llm(request: Request) -> LLMClient:
     return cliente
 
 
+def obter_registro(request: Request) -> RegistroDeExtracoes:
+    registro = getattr(request.app.state, "registro_extracoes", None)
+    if registro is None:
+        registro = RegistroDeExtracoes()
+        request.app.state.registro_extracoes = registro
+    return registro
+
+
+FALHAS_DA_EXTRACAO = (
+    ArquivoNaoPdf,
+    DocumentoNaoFds,
+    PdfSemTexto,
+    EntradaInvalida,
+    TimeoutError,
+    ErroLLM,
+    EvidenciaInvalida,
+    ValidationError,
+)
+
+
+def _status_da_falha(erro: Exception) -> tuple[int, str]:
+    """Status HTTP e mensagem de uma falha da extração; vale para a rota síncrona e para a assíncrona."""
+    if isinstance(erro, (ArquivoNaoPdf, DocumentoNaoFds)):
+        return 400, str(erro)
+    if isinstance(erro, (PdfSemTexto, EntradaInvalida)):
+        return 422, str(erro)
+    if isinstance(erro, TimeoutError):
+        logger.warning("Extração excedeu o prazo.")
+        return 504, "A extração excedeu o tempo limite."
+    logger.warning("Resposta da IA rejeitada: %s", type(erro).__name__)
+    return 502, "A IA não devolveu uma extração válida."
+
+
 @router.post("/extracoes", dependencies=[Depends(verificar_token)])
 async def criar_extracao(
     request: Request,
@@ -84,17 +118,53 @@ async def criar_extracao(
         saida = await _extrair_com_prazo(cliente, conteudo)
     except _FalhaRequisicao as falha:
         return _erro(falha.status, falha.detalhe)
-    except (ArquivoNaoPdf, DocumentoNaoFds) as erro:
-        return _erro(400, str(erro))
-    except (PdfSemTexto, EntradaInvalida) as erro:
-        return _erro(422, str(erro))
-    except TimeoutError:
-        logger.warning("Extração excedeu o prazo.")
-        return _erro(504, "A extração excedeu o tempo limite.")
-    except (ErroLLM, EvidenciaInvalida, ValidationError) as erro:
-        logger.warning("Resposta da IA rejeitada: %s", type(erro).__name__)
-        return _erro(502, "A IA não devolveu uma extração válida.")
+    except FALHAS_DA_EXTRACAO as erro:
+        return _erro(*_status_da_falha(erro))
     return JSONResponse(content=sanitizar_saida(saida))
+
+
+@router.post("/extracoes/assincronas", status_code=202, dependencies=[Depends(verificar_token)])
+async def criar_extracao_assincrona(
+    request: Request,
+    cliente: LLMClient = Depends(obter_cliente_llm),
+    registro: RegistroDeExtracoes = Depends(obter_registro),
+) -> JSONResponse:
+    """Mesma entrada de `POST /extracoes`; devolve o id na hora e a extração roda em segundo plano."""
+    try:
+        conteudo = await _ler_pdf_enviado(request)
+    except _FalhaRequisicao as falha:
+        return _erro(falha.status, falha.detalhe)
+
+    async def trabalho() -> dict:
+        try:
+            return sanitizar_saida(await _extrair_com_prazo(cliente, conteudo))
+        except FALHAS_DA_EXTRACAO as erro:
+            raise FalhaDaExtracao(*_status_da_falha(erro)) from erro
+
+    try:
+        extracao = registro.iniciar(trabalho)
+    except CapacidadeEsgotada:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Há extrações demais em andamento. Tente de novo em instantes."},
+            headers={"Retry-After": "10"},
+        )
+    return JSONResponse(
+        status_code=202,
+        content=extracao.como_resposta(),
+        headers={"Location": f"/extracoes/assincronas/{extracao.id}"},
+    )
+
+
+@router.get("/extracoes/assincronas/{id_extracao}", dependencies=[Depends(verificar_token)])
+async def consultar_extracao_assincrona(
+    id_extracao: str,
+    registro: RegistroDeExtracoes = Depends(obter_registro),
+) -> JSONResponse:
+    extracao = registro.consultar(id_extracao)
+    if extracao is None:
+        return _erro(404, "Extração não encontrada ou expirada.")
+    return JSONResponse(content=extracao.como_resposta())
 
 
 async def _ler_pdf_enviado(request: Request) -> bytes:

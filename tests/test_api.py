@@ -15,7 +15,13 @@ def test_health_e_interface_disponiveis():
     assert resposta.json() == {"status": "ok"}
     assert pagina.status_code == 200
     assert "Processar FDS" in pagina.text
-    assert set(app.openapi()["paths"]) == {"/health", "/api/extracoes", "/extracoes"}
+    assert set(app.openapi()["paths"]) == {
+        "/health",
+        "/api/extracoes",
+        "/extracoes",
+        "/extracoes/assincronas",
+        "/extracoes/assincronas/{id_extracao}",
+    }
 
 
 def entrada(secao_3=True):

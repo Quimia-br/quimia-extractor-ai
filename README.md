@@ -1,35 +1,35 @@
 # Quimia Extractor AI
 
-Serviço Python para extrair dados das seções 3 (composição), 4 (primeiros socorros) e 10 (estabilidade e reatividade) de uma Ficha de Dados de Segurança (FDS). A extração usa saídas estruturadas, evidências vinculadas às páginas de origem e pendências quando a informação não está clara ou não foi informada.
+Serviço Python (FastAPI) que extrai dados das seções 3 (composição), 4 (primeiros socorros) e 10 (estabilidade e reatividade) de uma Ficha de Dados de Segurança (FDS). A extração usa saídas estruturadas, evidências vinculadas às páginas de origem e pendências quando a informação não está clara ou não foi informada.
 
-O texto da FDS é tratado como conteúdo não confiável. Instruções que apareçam no documento não são seguidas pelo extrator. Cada informação extraída precisa de uma citação literal presente no texto recebido; evidências que não correspondam à fonte são rejeitadas.
+O texto da FDS é tratado como conteúdo não confiável. Instruções que apareçam no documento não são seguidas pelo extrator. Cada informação extraída precisa de uma citação literal presente no texto recebido (a comparação ignora espaços, porque a extração de texto do PDF costuma abrir palavras); evidências que não correspondam à fonte são rejeitadas.
 
-## Estado atual
+A quimia-api consome este serviço (`QUIMIA_EXTRATOR_URL` e `QUIMIA_EXTRATOR_TOKEN`). A saída completa é montada pelo serviço a partir das respostas estruturadas de cada seção, e ele não grava dados.
 
-- O serviço recebe texto das páginas em `POST /api/extracoes` e recebe um PDF em `POST /extracoes`.
-- O núcleo de extração é implementado em Python e usa um provedor de IA compatível com a API da OpenAI.
-- A aplicação HTTP expõe `GET /health`, `POST /api/extracoes`, `POST /extracoes` e a interface local `GET /teste`.
-- A interface e a rota JSON aceitam apenas conexões locais por padrão. A rota de PDF exige token. Ainda não há integração com banco de dados.
-- A saída completa é montada pelo serviço Python a partir das respostas estruturadas de cada seção.
+## Requisitos
 
-## Requisitos e configuração local
+- Python 3.12 (a versão usada pelo CI)
+- Uma chave de um provedor de IA compatível com a API da OpenAI
 
-O CI usa Python 3.12. Instale as dependências de desenvolvimento no interpretador Python que você utiliza:
+## Comandos
 
 ```powershell
-python -m pip install -r requirements-dev.txt
-Copy-Item .env.example .env
+python -m pip install -r requirements-dev.txt         # dependências de desenvolvimento
+Copy-Item .env.example .env                           # primeira vez; se o .env já existe, preserve-o
+python -m uvicorn app.main:app --reload               # sobe em http://127.0.0.1:8000
+python -m pytest -q                                   # testes
+python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=80
 ```
 
-No Windows, se o comando `python` não apontar para uma instalação funcional, use um ambiente virtual com o Python disponível:
+No Windows, se o comando `python` não apontar para uma instalação funcional, use um ambiente virtual:
 
 ```powershell
-py -3.11 -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
 ```
 
-Se o `.env` já estiver configurado, preserve-o em vez de repetir o `Copy-Item`.
+## Configuração
 
 Edite `.env` e informe `LLM_API_KEY` e `LLM_MODEL`. Os demais valores podem ser mantidos ou ajustados:
 
@@ -38,20 +38,24 @@ Edite `.env` e informe `LLM_API_KEY` e `LLM_MODEL`. Os demais valores podem ser 
 | `LLM_API_KEY` | Chave do provedor de IA |
 | `LLM_MODEL` | Modelo usado nas extrações |
 | `LLM_BASE_URL` | URL base OpenAI-compatível do provedor; sem ela, usa a API da OpenAI |
-| `LLM_TIMEOUT_SECONDS` | Tempo limite de cada chamada à IA |
+| `LLM_TIMEOUT_SECONDS` | Tempo limite de cada chamada à IA; deve caber em `EXTRATOR_TIMEOUT_SECONDS` |
 | `LLM_MAX_RETRIES` | Tentativas para falhas temporárias |
 | `LLM_MAX_OUTPUT_TOKENS` | Limite de tokens da resposta |
 | `LLM_REASONING_EFFORT` | Nível de raciocínio solicitado ao modelo (enviado só quando definido) |
-| `EXTRATOR_API_TOKEN` | Token exigido em `POST /extracoes`; sem ele, a rota responde 503 |
-| `EXTRATOR_TIMEOUT_SECONDS` | Prazo total de uma extração (padrão 55 s; a quimia-api espera até 60 s) |
+| `EXTRATOR_API_TOKEN` | Token exigido nas rotas de PDF; sem ele, elas respondem 503 |
+| `EXTRATOR_TIMEOUT_SECONDS` | Prazo total de uma extração (padrão 25 s); acima dele a rota responde 504 em JSON |
+| `EXTRACTION_ALLOW_REMOTE` | Libera `/teste` e `/api/extracoes` para clientes remotos (padrão `false`) |
 
 Exemplo com a Command Code (o Provider API exige o plano Pro ou superior):
 
 ```dotenv
 LLM_API_KEY=<chave criada no Command Code Studio>
-LLM_MODEL=deepseek/deepseek-v4-1-flash
+LLM_MODEL=gpt-6-luna
 LLM_BASE_URL=https://api.commandcode.ai/provider/v1
+LLM_REASONING_EFFORT=low
 ```
+
+Com `gpt-6-luna` e esforço `low`, a mediana das FDS de teste foi de 10 s. Sem o `low` o modelo passa de 30 s por FDS, e `minimal` e `none` são recusados pelo provedor. O modelo anterior (`xiaomi/mimo-v2.6-flash`) levava de 35 a 150 s.
 
 Para conferir os IDs de modelo disponíveis:
 
@@ -67,15 +71,28 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 O mesmo valor deve ser configurado na quimia-api como `QUIMIA_EXTRATOR_TOKEN`, e a URL pública do serviço como `QUIMIA_EXTRATOR_URL`.
 
-Para iniciar a aplicação HTTP localmente:
+## Rotas e documentação da API
 
-```powershell
-uvicorn app.main:app --reload
-```
+Com o serviço no ar, a documentação interativa fica em `/docs` e o documento OpenAPI em `/openapi.json`.
 
-A rota `http://127.0.0.1:8000/health` retorna `{"status":"ok"}`. Abra `http://127.0.0.1:8000/teste` para editar um exemplo de JSON, executar a extração real, inspecionar erros e copiar a resposta formatada. A interface faz `POST /api/extracoes`; a rota autenticada `POST /extracoes` recebe o PDF. Se alguma seção estiver marcada como `encontrada: true`, o serviço chama o provedor de IA e requer credenciais válidas.
+| Rota | Acesso | Finalidade |
+|---|---|---|
+| `GET /health` | público | `{"status":"ok"}`, usado no smoke check do deploy |
+| `POST /extracoes` | token | recebe o PDF (campo `arquivo`) e devolve a extração na mesma resposta |
+| `POST /extracoes/assincronas` | token | mesma entrada; devolve `202` com um `id` |
+| `GET /extracoes/assincronas/{id}` | token | estado da extração iniciada acima |
+| `POST /api/extracoes` | só local | recebe o texto das páginas (`ExtracaoEntrada`) |
+| `GET /teste` | só local | interface para editar um exemplo de JSON, executar a extração e inspecionar erros |
 
-As rotas `/teste` e `/api/extracoes` só aceitam clientes de `127.0.0.1` ou `::1` por padrão. Para liberar clientes remotos, configure `EXTRACTION_ALLOW_REMOTE=true` no ambiente **somente depois de implantar autenticação e controles de uso nessa rota**; a variável não implementa esses controles. `POST /extracoes` usa `EXTRATOR_API_TOKEN`.
+As rotas `/teste` e `/api/extracoes` só aceitam clientes de `127.0.0.1` ou `::1` por padrão. Para liberar clientes remotos, configure `EXTRACTION_ALLOW_REMOTE=true` **somente depois de implantar autenticação e controles de uso nessa rota**; a variável não implementa esses controles. Se alguma seção estiver marcada como `encontrada: true`, o serviço chama o provedor de IA e requer credenciais válidas.
+
+### Extração assíncrona
+
+O host da Discloud corta qualquer resposta após cerca de 30 s e entrega uma página HTML com status 200, e uma extração real pode passar disso. Por isso `POST /extracoes/assincronas` responde na hora e o chamador consulta o resultado:
+
+- `POST /extracoes/assincronas` devolve `202` com `{"id": "...", "status": "processando"}` e o cabeçalho `Location`. Erros do arquivo (`400`, `413`) saem aqui, antes de criar a extração.
+- `GET /extracoes/assincronas/{id}` informa `processando`, `concluida` (com o `resultado`, igual à resposta de `POST /extracoes`) ou `falhou` (com `codigo` e `detail`, os mesmos da rota síncrona). Id desconhecido ou vencido é `404`.
+- Os registros ficam em memória por 15 min, com no máximo 6 em andamento (acima disso, `429` com `Retry-After`). Um reinício da aplicação perde as extrações em andamento, e o chamador refaz o envio.
 
 ## Contrato do serviço de extração
 
@@ -129,7 +146,16 @@ O resultado contém `status`, `mensagem`, `secoes` e `pendencias`. As seções s
 
 Falhas usam `{"erro":{"tipo":"...","mensagem":"...","detalhes":[]}}`. JSON malformado e entrada fora do schema retornam HTTP 422 com tipos `json_invalido` e `validacao`; texto acima dos limites também retorna `validacao`. Falta de configuração ou de créditos da API retorna 503 com a causa explícita; outras falhas do provedor ou da validação da extração retornam 502, e falha inesperada retorna 500. Em `detalhes`, cada item identifica `campo` e `mensagem`. A interface mostra esses erros e só habilita a cópia de respostas bem sucedidas.
 
-Antes da integração, alinhar com o backend e o banco: autenticação e política de uso; se a entrada terá identificador da FDS ou metadados adicionais; como persistir campos nulos, evidências e pendências; e se erros devem usar esse envelope HTTP ou o padrão da API principal. A rota não grava dados.
+As rotas de PDF respondem `{"detail": "..."}`: `400` para arquivo que não é PDF ou sem as seções 3, 4 e 10 localizadas, `413` acima de 10 MB, `422` para PDF sem texto legível (por exemplo, só imagem), `502` quando a IA não devolve uma extração válida e `504` quando a extração passa do prazo.
+
+### Rede de proteção da extração
+
+- Cada seção rejeitada por formato ou por citação inexistente ganha mais uma tentativa; falta de crédito não é repetida.
+- A situação da seção 10 acompanha o que a IA devolveu: itens só existem em `identificadas`, e `ausencia_declarada` sem a citação da declaração vira `nao_especificadas`.
+- `atencao_medica_imediata: false` só vale quando o texto nega a urgência por escrito; sem isso o valor volta a `null`.
+- Uma concentração que difere do número presente na citação é omitida, com pendência `dados_contraditorios`.
+
+Antes da integração, alinhar com o backend e o banco: autenticação e política de uso; se a entrada terá identificador da FDS ou metadados adicionais; como persistir campos nulos, evidências e pendências; e se erros devem usar esse envelope HTTP ou o padrão da API principal.
 
 ## Chamar o serviço pelo código Python
 
@@ -169,13 +195,28 @@ async def main():
 asyncio.run(main())
 ```
 
-## Testes e CI
+## CI, checks e deploy
 
-Instale `requirements-dev.txt` para executar os testes:
+O GitHub Actions executa `.github/workflows/ci.yml` em PRs para `main`, pushes em `main` e Releases publicadas. O workflow também pode ser iniciado manualmente para validar os gates sem fazer deploy. Cada check publica um resumo com seu objetivo, critério de aprovação, resultado e onde investigar uma falha; o check `CI summary` consolida a execução. É o mesmo workflow do quimia-agent.
 
-```powershell
-python -m pytest -q
-python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=80
+- **Build** — instala as dependências e verifica que a aplicação importa.
+- **Unit tests** — executa o `pytest`. Os testes usam respostas simuladas e não fazem chamadas pagas ao provedor de IA; os PDFs de teste (FDS em texto e PDF só com imagem) são gerados em memória por `tests/pdf_fixtures.py`.
+- **Coverage gate** — exige cobertura de pelo menos 80% em `app/`.
+- **Discloud artifact** — gera o ZIP do deploy com `scripts/package_discloud_release.py`.
+- **Deploy to Discloud** — só roda ao publicar uma Release, usa o Environment `discloud`, envia o ZIP e verifica que `/health` responde HTTP 200.
+- **PR title** — `.github/workflows/pr-title.yml` exige título Conventional Commits (`tipo(escopo): descrição`).
+
+O deploy não é um check exigido para PR, pois só roda em Release publicada. A configuração do app na Discloud está em `discloud.config`.
+
+### Variáveis na Discloud
+
+Defina no app `quimia-extractor` (além de `LLM_API_KEY` e `LLM_BASE_URL`):
+
+```dotenv
+LLM_MODEL=gpt-6-luna
+LLM_REASONING_EFFORT=low
+EXTRATOR_API_TOKEN=<o mesmo valor de QUIMIA_EXTRATOR_TOKEN na quimia-api>
+EXTRATOR_TIMEOUT_SECONDS=25
 ```
 
-Os testes usam respostas simuladas e não fazem chamadas pagas ao provedor de IA. Os PDFs de teste (FDS em texto e PDF só com imagem) são gerados em memória por `tests/pdf_fixtures.py`. Em pull requests, o workflow verifica a instalação e importação da aplicação, executa os testes, exige cobertura mínima de 80% e valida o pacote ZIP da Discloud. A publicação de uma Release executa o deploy e verifica a rota `/health`.
+A ordem de publicação quando a quimia-api usa as rotas assíncronas é este serviço primeiro, depois a quimia-api e depois o portal.
